@@ -26,6 +26,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
     const bookmark = await updateBookmark(parseInt(id, 10), {
       title: body.title,
+      url: body.url,
       description: body.description,
       is_read: body.is_read,
       is_archived: body.is_archived,

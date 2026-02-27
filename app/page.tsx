@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { getBookmarks, getAllTags } from "@/lib/db";
-import { DeleteButton } from "./delete-button";
 import { SearchBar } from "./search-bar";
 import { Bookmarklet } from "./bookmarklet";
+import { BookmarkItem } from "./bookmark-item";
 
 export default async function Home({
   searchParams,
@@ -23,7 +23,7 @@ export default async function Home({
   return (
     <div className="container">
       <header>
-        <h1>Marks</h1>
+        <h1><Link href="/">Marks</Link></h1>
         <nav>
           <Link href="/">all</Link>
           <Link href="/read">read later</Link>
@@ -74,65 +74,7 @@ export default async function Home({
         <>
           <ul className="bookmark-list">
             {bookmarks.map((b) => (
-              <li key={b.id} className="bookmark-item">
-                <div className="bookmark-row">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    className="favicon"
-                    src={`https://www.google.com/s2/favicons?sz=32&domain=${new URL(b.url).hostname}`}
-                    alt=""
-                    width={16}
-                    height={16}
-                    loading="lazy"
-                  />
-                  <div className="bookmark-content">
-                    <a
-                      href={b.url}
-                      className="bookmark-title"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      {b.title || b.url}
-                    </a>
-                    <span className="bookmark-url">
-                      {new URL(b.url).hostname.replace("www.", "")}
-                    </span>
-                    <div className="bookmark-meta">
-                      <span className="date">
-                        {new Date(b.created_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year:
-                            new Date(b.created_at).getFullYear() !==
-                            new Date().getFullYear()
-                              ? "numeric"
-                              : undefined,
-                        })}
-                      </span>
-                      {b.tags.length > 0 && (
-                        <div className="tags">
-                          {b.tags.map((t) => (
-                            <Link
-                              key={t}
-                              href={`/?tag=${encodeURIComponent(t)}`}
-                              className="tag"
-                            >
-                              {t}
-                            </Link>
-                          ))}
-                        </div>
-                      )}
-                      <Link href={`/reader/${b.id}`} className="read-link">
-                        read
-                      </Link>
-                      <DeleteButton bookmarkId={b.id} />
-                    </div>
-                    {b.description && (
-                      <p className="bookmark-description">{b.description}</p>
-                    )}
-                  </div>
-                </div>
-              </li>
+              <BookmarkItem key={b.id} bookmark={b} currentTag={tag} />
             ))}
           </ul>
 
