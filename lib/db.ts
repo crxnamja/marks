@@ -122,6 +122,7 @@ export async function updateBookmark(
   id: number,
   input: {
     title?: string;
+    url?: string;
     description?: string;
     is_read?: boolean;
     is_archived?: boolean;
