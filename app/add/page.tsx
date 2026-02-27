@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 
 export default function AddPage() {
+  return (
+    <Suspense>
+      <AddForm />
+    </Suspense>
+  );
+}
+
+function AddForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
