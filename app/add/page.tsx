@@ -16,20 +16,30 @@ function AddForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  const [url, setUrl] = useState(searchParams.get("url") ?? "");
-  const [title, setTitle] = useState(searchParams.get("title") ?? "");
-  const [description, setDescription] = useState(
-    searchParams.get("description") ?? "",
-  );
+  // Handle share intent: some apps send URL in "text" param instead of "url"
+  const rawUrl = searchParams.get("url") ?? "";
+  const rawText = searchParams.get("description") ?? searchParams.get("text") ?? "";
+  const rawTitle = searchParams.get("title") ?? "";
+  const urlMatch = !rawUrl && rawText ? rawText.match(/(https?:\/\/[^\s]+)/) : null;
+  const initialUrl = rawUrl || (urlMatch ? urlMatch[1] : "");
+  const initialDescription = urlMatch
+    ? rawText.replace(urlMatch[1], "").trim()
+    : rawText;
+
+  const [url, setUrl] = useState(initialUrl);
+  const [title, setTitle] = useState(rawTitle);
+  const [description, setDescription] = useState(initialDescription);
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [readLater, setReadLater] = useState(false);
   const [recentTags, setRecentTags] = useState<string[]>([]);
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fetchingMeta, setFetchingMeta] = useState(false);
-  const [suggestedTags, setSuggestedTags] = useState<string[]>([]);
   const [error, setError] = useState("");
-  const isPopup = searchParams.has("url");
+  const isPopup = !!initialUrl;
 
   useEffect(() => {
     // Fetch recent tags for pills
@@ -54,6 +64,39 @@ function AddForm() {
           .map(([name]) => name);
         setRecentTags(sorted);
       });
+  }, []);
+
+  async function fetchSuggestedTags(linkUrl: string) {
+    if (!linkUrl) return;
+    try {
+      new URL(linkUrl);
+    } catch {
+      return;
+    }
+    setLoadingSuggestions(true);
+    setSuggestionsLoaded(false);
+    try {
+      const res = await fetch(
+        `/api/suggest-tags?url=${encodeURIComponent(linkUrl)}`,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setSuggestedTags(data.tags ?? []);
+      }
+    } catch {
+      // Silently fail — suggestions are optional
+    } finally {
+      setLoadingSuggestions(false);
+      setSuggestionsLoaded(true);
+    }
+  }
+
+  // Auto-fetch suggestions when page loads with a URL (bookmarklet)
+  useEffect(() => {
+    if (url) {
+      fetchSuggestedTags(url);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function addTag(tag: string) {
@@ -162,7 +205,11 @@ function AddForm() {
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          onBlur={handleUrlBlur}
+          onBlur={(e) => {
+            const val = e.target.value;
+            fetchSuggestedTags(val);
+            if (!suggestedTags.length) fetchMetadata(val);
+          }}
           placeholder="https://..."
           required
           autoFocus={!isPopup}
@@ -207,15 +254,37 @@ function AddForm() {
           />
         </div>
 
-        {(() => {
-          const suggested = suggestedTags.filter((t) => !tags.includes(t));
-          const recent = recentTags.filter((t) => !tags.includes(t));
-          // Show suggested tags if available, otherwise fall back to recent tags
-          const combined = suggested.length > 0 ? suggested : recent.slice(0, 10);
-          if (combined.length === 0) return null;
-          return (
-            <div className="recent-tags">
-              {combined.map((t) => (
+        {loadingSuggestions && (
+          <div className="suggested-tags">
+            <span className="suggested-tags-label">Suggesting tags…</span>
+          </div>
+        )}
+
+        {!loadingSuggestions &&
+          suggestedTags.filter((t) => !tags.includes(t)).length > 0 && (
+            <div className="suggested-tags">
+              <span className="suggested-tags-label">Suggested:</span>
+              {suggestedTags
+                .filter((t) => !tags.includes(t))
+                .map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className="tag suggested-tag"
+                    onClick={() => addTag(t)}
+                  >
+                    + {t}
+                  </button>
+                ))}
+            </div>
+          )}
+
+        {(suggestionsLoaded || !url) && recentTags.length > 0 && (
+          <div className="recent-tags">
+            {recentTags
+              .filter((t) => !tags.includes(t) && !suggestedTags.includes(t))
+              .slice(0, 10)
+              .map((t) => (
                 <button
                   key={t}
                   type="button"
@@ -225,9 +294,8 @@ function AddForm() {
                   {t}
                 </button>
               ))}
-            </div>
-          );
-        })()}
+          </div>
+        )}
 
         <label className="checkbox-label">
           <input
