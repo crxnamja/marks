@@ -36,8 +36,18 @@ export async function middleware(request: NextRequest) {
   const isPublicPath = isAuthPage || path.startsWith("/api/auth");
 
   if (!user && !isPublicPath) {
+    // For API routes with Bearer token (Chrome extension), let the route handle auth
+    if (path.startsWith("/api/") && request.headers.get("authorization")) {
+      return supabaseResponse;
+    }
+
     const url = request.nextUrl.clone();
+    // Preserve the intended destination so the user returns after login
+    const redirectTo = request.nextUrl.pathname + request.nextUrl.search;
     url.pathname = "/login";
+    if (redirectTo !== "/") {
+      url.searchParams.set("redirect", redirectTo);
+    }
     return NextResponse.redirect(url);
   }
 
