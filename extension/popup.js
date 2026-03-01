@@ -98,12 +98,11 @@ async function showSaveView() {
 async function fetchSuggestedTags(url) {
   suggestedTagsEl.style.display = "none";
   try {
-    const res = await fetch(
-      `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
-      { headers: { Authorization: `Bearer ${config.token}` } },
-    );
-    if (!res.ok) return;
-    const data = await res.json();
+    // Route through background service worker for auth + CORS handling
+    const data = await chrome.runtime.sendMessage({
+      type: "suggest-tags",
+      url,
+    });
     if (data.tags?.length > 0) {
       // Clear old suggestions
       suggestedTagsEl.querySelectorAll(".suggested-tag").forEach((el) => el.remove());
@@ -123,8 +122,8 @@ async function fetchSuggestedTags(url) {
       }
       suggestedTagsEl.style.display = "flex";
     }
-  } catch {
-    // Suggestions are optional
+  } catch (err) {
+    console.error("[Marks] suggest-tags error:", err);
   }
 }
 

@@ -2,6 +2,7 @@
 // Detects when you bookmark a tweet on x.com and saves it to Marks
 
 (function () {
+  console.log("[Marks] content-twitter.js loaded on", window.location.href);
   const API_URL = "https://marks-drab.vercel.app";
   let config = null;
   let recentSaves = [];
@@ -28,15 +29,19 @@
   });
 
   // Watch for bookmark button clicks using event delegation
+  // Use capture phase because Twitter stops event propagation
   document.addEventListener("click", (e) => {
     const bookmarkBtn = e.target.closest('[data-testid="bookmark"]');
+    console.log("[Marks] click detected, bookmark btn:", bookmarkBtn ? "found" : "not found", "testid:", e.target.closest("[data-testid]")?.getAttribute("data-testid"));
     if (!bookmarkBtn) return;
 
+    console.log("[Marks] bookmark click captured, waiting 500ms...");
     // Small delay to let Twitter process the bookmark
     setTimeout(() => handleBookmarkClick(bookmarkBtn), 500);
-  });
+  }, true);
 
   function handleBookmarkClick(btn) {
+    console.log("[Marks] handleBookmarkClick — token:", !!config?.token, "data-testid:", btn.getAttribute("data-testid"));
     if (!config?.token) return;
 
     // We only capture clicks on [data-testid="bookmark"] (unbookmarked state).
@@ -116,40 +121,20 @@
     const tags = [...new Set([...tweet.hashtags, "twitter"])];
 
     try {
-      const res = await fetch(`${API_URL}/api/bookmarks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.token}`,
-        },
-        body: JSON.stringify({
+      // Route through background service worker to avoid CORS
+      const result = await chrome.runtime.sendMessage({
+        type: "save-bookmark",
+        data: {
           url: tweet.url,
           title: tweet.title,
           description: tweet.text,
           tags,
           is_read: false,
-        }),
+        },
       });
 
-      if (res.status === 401) {
-        // Try refresh
-        const refreshed = await refreshToken();
-        if (refreshed) {
-          await fetch(`${API_URL}/api/bookmarks`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${refreshed}`,
-            },
-            body: JSON.stringify({
-              url: tweet.url,
-              title: tweet.title,
-              description: tweet.text,
-              tags,
-              is_read: false,
-            }),
-          });
-        }
+      if (!result?.ok) {
+        throw new Error(result?.error || "Save failed");
       }
 
       // Track recent save
@@ -165,36 +150,9 @@
 
       showToast(`Saved to Marks: @${tweet.handle}`);
       updatePanel();
-    } catch {
+    } catch (err) {
+      console.error("[Marks] save failed:", err);
       showToast("Failed to save to Marks", true);
-    }
-  }
-
-  async function refreshToken() {
-    if (!config.refreshToken || !config.supabaseUrl || !config.supabaseKey) return null;
-    try {
-      const res = await fetch(
-        `${config.supabaseUrl}/auth/v1/token?grant_type=refresh_token`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: config.supabaseKey,
-          },
-          body: JSON.stringify({ refresh_token: config.refreshToken }),
-        },
-      );
-      if (!res.ok) return null;
-      const data = await res.json();
-      config.token = data.access_token;
-      config.refreshToken = data.refresh_token;
-      chrome.storage.local.set({
-        token: data.access_token,
-        refreshToken: data.refresh_token,
-      });
-      return data.access_token;
-    } catch {
-      return null;
     }
   }
 

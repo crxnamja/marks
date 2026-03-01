@@ -81,6 +81,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     saveBookmark(msg.data).then(sendResponse);
     return true; // async
   }
+  if (msg.type === "suggest-tags") {
+    fetchSuggestedTags(msg.url).then(sendResponse);
+    return true;
+  }
   if (msg.type === "get-config") {
     getConfig().then(sendResponse);
     return true;
@@ -122,6 +126,33 @@ async function saveBookmark(data) {
     return { ok: true, bookmark };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+}
+
+async function fetchSuggestedTags(url) {
+  const config = await getConfig();
+  if (!config.token) return { tags: [] };
+
+  try {
+    let token = config.token;
+    let res = await fetch(
+      `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    if (res.status === 401) {
+      token = await refreshToken(config);
+      if (!token) return { tags: [] };
+      res = await fetch(
+        `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+    }
+
+    if (!res.ok) return { tags: [] };
+    return await res.json();
+  } catch {
+    return { tags: [] };
   }
 }
 
