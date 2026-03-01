@@ -8,23 +8,22 @@ const tagWrap = document.getElementById("tag-wrap");
 const tagInput = document.getElementById("tag-input");
 const suggestedTagsEl = document.getElementById("suggested-tags");
 
+const API_URL = "https://marks-drab.vercel.app";
+
 let tags = [];
 let config = {};
 
 // Init
 document.addEventListener("DOMContentLoaded", async () => {
   config = await chrome.storage.local.get([
-    "apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey",
+    "token", "refreshToken", "supabaseUrl", "supabaseKey",
   ]);
+  config.apiUrl = API_URL;
 
-  if (config.token && config.apiUrl) {
+  if (config.token) {
     showSaveView();
   } else {
     loginView.style.display = "block";
-    // Restore saved API URL
-    if (config.apiUrl) {
-      document.getElementById("api-url").value = config.apiUrl;
-    }
   }
 });
 
@@ -37,7 +36,7 @@ loginForm.addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "Signing in...";
 
-  const apiUrl = document.getElementById("api-url").value.replace(/\/$/, "");
+  const apiUrl = API_URL;
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
@@ -65,7 +64,6 @@ loginForm.addEventListener("submit", async (e) => {
 
     const data = await res.json();
     await chrome.storage.local.set({
-      apiUrl,
       token: data.access_token,
       refreshToken: data.refresh_token,
       supabaseUrl: supabaseUrl.url,
@@ -73,8 +71,9 @@ loginForm.addEventListener("submit", async (e) => {
     });
 
     config = await chrome.storage.local.get([
-      "apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey",
+      "token", "refreshToken", "supabaseUrl", "supabaseKey",
     ]);
+    config.apiUrl = API_URL;
     loginView.style.display = "none";
     showSaveView();
   } catch (err) {

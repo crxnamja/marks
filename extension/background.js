@@ -1,3 +1,5 @@
+const API_URL = "https://marks-drab.vercel.app";
+
 // Context menu setup
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -125,12 +127,12 @@ async function saveBookmark(data) {
 
 async function getConfig() {
   const data = await chrome.storage.local.get([
-    "apiUrl",
     "token",
     "refreshToken",
     "supabaseUrl",
     "supabaseKey",
   ]);
+  data.apiUrl = API_URL;
   return data;
 }
 

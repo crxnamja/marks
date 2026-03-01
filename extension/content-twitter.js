@@ -2,13 +2,16 @@
 // Detects when you bookmark a tweet on x.com and saves it to Marks
 
 (function () {
+  const API_URL = "https://marks-drab.vercel.app";
+
   let config = null;
   let recentSaves = [];
 
   // Load config and recent saves
   chrome.storage.local.get(
-    ["apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey"],
+    ["token", "refreshToken", "supabaseUrl", "supabaseKey"],
     (data) => {
+      data.apiUrl = API_URL;
       config = data;
     },
   );
