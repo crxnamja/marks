@@ -17,6 +17,16 @@
     recentSaves = data.twitterRecentSaves || [];
   });
 
+  // Stay in sync when user logs in/out from the popup
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.token) {
+      chrome.storage.local.get(
+        ["token", "refreshToken", "supabaseUrl", "supabaseKey"],
+        (data) => { config = data; },
+      );
+    }
+  });
+
   // Watch for bookmark button clicks using event delegation
   document.addEventListener("click", (e) => {
     const bookmarkBtn = e.target.closest('[data-testid="bookmark"]');
