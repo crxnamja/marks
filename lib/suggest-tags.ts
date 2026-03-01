@@ -1,5 +1,3 @@
-import { JSDOM } from "jsdom";
-
 // Common stop words to filter out
 const STOP_WORDS = new Set([
   "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of",
@@ -24,9 +22,7 @@ const STOP_WORDS = new Set([
 
 /** Check if a keyword is a stop word (handles multi-word meta keywords) */
 function isStopWord(keyword: string): boolean {
-  // Single word: direct check
   if (!keyword.includes(" ")) return STOP_WORDS.has(keyword);
-  // Multi-word: stop word if ALL words are stop words
   const words = keyword.split(/\s+/);
   return words.every((w) => STOP_WORDS.has(w) || w.length <= 2);
 }
@@ -56,7 +52,7 @@ export async function suggestTags(
 
     if (res.ok) {
       const html = await res.text();
-      addMetaKeywords(html, url, candidates);
+      addMetaKeywords(html, candidates);
     }
   } catch {
     // If fetch fails, we still have URL-based suggestions
@@ -70,10 +66,8 @@ export async function suggestTags(
         candidates.set(tag, score + 10);
       }
     }
-    // Also check if any user tag is a substring match of a candidate or vice versa
     for (const userTag of userTagSet) {
       if (!candidates.has(userTag)) {
-        // Check if any candidate contains this user tag or vice versa
         for (const [candidate] of candidates) {
           if (candidate.includes(userTag) || userTag.includes(candidate)) {
             candidates.set(userTag, (candidates.get(userTag) ?? 0) + 8);
@@ -102,13 +96,10 @@ export function suggestTagsFromUrl(url: string): string[] {
 }
 
 /** Build candidates from URL + raw HTML. Exported for testing. */
-export function suggestTagsFromHtml(
-  url: string,
-  html: string,
-): string[] {
+export function suggestTagsFromHtml(url: string, html: string): string[] {
   const candidates = new Map<string, number>();
   addUrlKeywords(url, candidates);
-  addMetaKeywords(html, url, candidates);
+  addMetaKeywords(html, candidates);
   return [...candidates.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
@@ -120,7 +111,6 @@ export function addUrlKeywords(url: string, candidates: Map<string, number>) {
     const parsed = new URL(url);
     const host = parsed.hostname.replace(/^www\./, "");
 
-    // Domain name (e.g., "github" from "github.com")
     const domainParts = host.split(".");
     for (const part of domainParts) {
       if (part.length > 2 && !STOP_WORDS.has(part)) {
@@ -128,7 +118,6 @@ export function addUrlKeywords(url: string, candidates: Map<string, number>) {
       }
     }
 
-    // Path segments (e.g., "/blog/javascript-tips" → "blog", "javascript", "tips")
     const pathParts = parsed.pathname
       .split(/[/\-_.]/)
       .map((s) => s.toLowerCase().trim())
@@ -142,19 +131,48 @@ export function addUrlKeywords(url: string, candidates: Map<string, number>) {
   }
 }
 
+/** Extract a meta tag attribute using regex (no DOM parser needed) */
+function getMetaContent(html: string, attr: string, value: string): string | null {
+  // Match both orders: name="x" content="y" and content="y" name="x"
+  const pattern1 = new RegExp(
+    `<meta[^>]+${attr}=["']${value}["'][^>]+content=["']([^"']*)["']`,
+    "i",
+  );
+  const pattern2 = new RegExp(
+    `<meta[^>]+content=["']([^"']*)["'][^>]+${attr}=["']${value}["']`,
+    "i",
+  );
+  return pattern1.exec(html)?.[1] ?? pattern2.exec(html)?.[1] ?? null;
+}
+
+/** Extract all meta tags with a given property (e.g., article:tag) */
+function getAllMetaContent(html: string, attr: string, value: string): string[] {
+  const results: string[] = [];
+  const pattern = new RegExp(
+    `<meta[^>]+(?:${attr}=["']${value}["'][^>]+content=["']([^"']*)["']|content=["']([^"']*)["'][^>]+${attr}=["']${value}["'])`,
+    "gi",
+  );
+  let match;
+  while ((match = pattern.exec(html)) !== null) {
+    const content = match[1] ?? match[2];
+    if (content) results.push(content);
+  }
+  return results;
+}
+
+/** Extract title text from <title> tag */
+function getTitle(html: string): string {
+  const match = /<title[^>]*>([^<]*)<\/title>/i.exec(html);
+  return match?.[1]?.trim() ?? "";
+}
+
 export function addMetaKeywords(
   html: string,
-  url: string,
   candidates: Map<string, number>,
 ) {
   try {
-    const dom = new JSDOM(html, { url });
-    const doc = dom.window.document;
-
     // Meta keywords tag
-    const metaKeywords = doc
-      .querySelector('meta[name="keywords"]')
-      ?.getAttribute("content");
+    const metaKeywords = getMetaContent(html, "name", "keywords");
     if (metaKeywords) {
       const keywords = metaKeywords
         .split(",")
@@ -166,9 +184,9 @@ export function addMetaKeywords(
     }
 
     // OG tags (article:tag)
-    const ogTags = doc.querySelectorAll('meta[property="article:tag"]');
-    for (const el of ogTags) {
-      const tag = el.getAttribute("content")?.toLowerCase().trim();
+    const ogTags = getAllMetaContent(html, "property", "article:tag");
+    for (const tagContent of ogTags) {
+      const tag = tagContent.toLowerCase().trim();
       if (tag && tag.length > 1 && tag.length <= 30 && !isStopWord(tag)) {
         candidates.set(tag, (candidates.get(tag) ?? 0) + 5);
       }
@@ -176,19 +194,15 @@ export function addMetaKeywords(
 
     // Title keywords
     const title =
-      doc.querySelector("title")?.textContent ??
-      doc.querySelector('meta[property="og:title"]')?.getAttribute("content") ??
+      getTitle(html) ||
+      getMetaContent(html, "property", "og:title") ||
       "";
     addTextKeywords(title, candidates, 2);
 
     // Description keywords
     const description =
-      doc
-        .querySelector('meta[name="description"]')
-        ?.getAttribute("content") ??
-      doc
-        .querySelector('meta[property="og:description"]')
-        ?.getAttribute("content") ??
+      getMetaContent(html, "name", "description") ||
+      getMetaContent(html, "property", "og:description") ||
       "";
     addTextKeywords(description, candidates, 1);
   } catch {
@@ -209,13 +223,11 @@ export function addTextKeywords(
     .split(/\s+/)
     .filter((w) => w.length > 2 && !STOP_WORDS.has(w) && !/^\d+$/.test(w));
 
-  // Count word frequency in this text
   const freq = new Map<string, number>();
   for (const w of words) {
     freq.set(w, (freq.get(w) ?? 0) + 1);
   }
 
-  // Add top words by frequency
   const topWords = [...freq.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
