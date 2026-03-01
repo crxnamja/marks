@@ -11,7 +11,25 @@ const STOP_WORDS = new Set([
   "should", "may", "might", "must", "shall", "also", "only", "then", "after",
   "before", "new", "one", "two", "get", "got", "use", "used", "using",
   "www", "com", "org", "net", "http", "https", "html", "htm", "php", "asp",
+  "best", "top", "most", "very", "like", "some", "any", "each", "every",
+  "first", "last", "next", "back", "here", "there", "where", "while",
+  "these", "those", "such", "other", "many", "much", "even", "still",
+  "well", "way", "part", "per", "via", "etc", "see", "end", "let",
+  "say", "said", "make", "made", "take", "come", "know", "think",
+  "look", "want", "give", "day", "good", "year", "right", "too",
+  "own", "same", "tell", "need", "home", "big", "high", "long",
+  "page", "site", "web", "blog", "post", "article", "read", "click",
+  "share", "follow", "sign", "free", "view", "index", "main", "amp",
 ]);
+
+/** Check if a keyword is a stop word (handles multi-word meta keywords) */
+function isStopWord(keyword: string): boolean {
+  // Single word: direct check
+  if (!keyword.includes(" ")) return STOP_WORDS.has(keyword);
+  // Multi-word: stop word if ALL words are stop words
+  const words = keyword.split(/\s+/);
+  return words.every((w) => STOP_WORDS.has(w) || w.length <= 2);
+}
 
 const FETCH_HEADERS = {
   "User-Agent":
@@ -19,7 +37,10 @@ const FETCH_HEADERS = {
   Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 };
 
-export async function suggestTags(url: string): Promise<string[]> {
+export async function suggestTags(
+  url: string,
+  userTags?: string[],
+): Promise<string[]> {
   const candidates = new Map<string, number>();
 
   // Extract keywords from URL structure
@@ -41,10 +62,32 @@ export async function suggestTags(url: string): Promise<string[]> {
     // If fetch fails, we still have URL-based suggestions
   }
 
-  // Sort by score and return top 3
+  // Boost candidates that match user's existing tags
+  if (userTags?.length) {
+    const userTagSet = new Set(userTags.map((t) => t.toLowerCase()));
+    for (const [tag, score] of candidates) {
+      if (userTagSet.has(tag)) {
+        candidates.set(tag, score + 10);
+      }
+    }
+    // Also check if any user tag is a substring match of a candidate or vice versa
+    for (const userTag of userTagSet) {
+      if (!candidates.has(userTag)) {
+        // Check if any candidate contains this user tag or vice versa
+        for (const [candidate] of candidates) {
+          if (candidate.includes(userTag) || userTag.includes(candidate)) {
+            candidates.set(userTag, (candidates.get(userTag) ?? 0) + 8);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // Sort by score and return top 5
   return [...candidates.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
+    .slice(0, 5)
     .map(([tag]) => tag);
 }
 
@@ -116,7 +159,7 @@ export function addMetaKeywords(
       const keywords = metaKeywords
         .split(",")
         .map((k) => k.toLowerCase().trim())
-        .filter((k) => k.length > 1 && k.length <= 30);
+        .filter((k) => k.length > 1 && k.length <= 30 && !isStopWord(k));
       for (const kw of keywords.slice(0, 10)) {
         candidates.set(kw, (candidates.get(kw) ?? 0) + 5);
       }
@@ -126,7 +169,7 @@ export function addMetaKeywords(
     const ogTags = doc.querySelectorAll('meta[property="article:tag"]');
     for (const el of ogTags) {
       const tag = el.getAttribute("content")?.toLowerCase().trim();
-      if (tag && tag.length > 1 && tag.length <= 30) {
+      if (tag && tag.length > 1 && tag.length <= 30 && !isStopWord(tag)) {
         candidates.set(tag, (candidates.get(tag) ?? 0) + 5);
       }
     }
