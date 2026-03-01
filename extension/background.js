@@ -1,3 +1,5 @@
+const API_URL = "https://marks-drab.vercel.app";
+
 // Context menu setup
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -15,7 +17,7 @@ chrome.runtime.onInstalled.addListener(() => {
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const config = await getConfig();
-  if (!config.apiUrl || !config.token) {
+  if (!config.token) {
     // Open popup for login
     chrome.action.openPopup();
     return;
@@ -27,7 +29,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!url) return;
 
   try {
-    const res = await fetch(`${config.apiUrl}/api/bookmarks`, {
+    const res = await fetch(`${API_URL}/api/bookmarks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -45,7 +47,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       const refreshed = await refreshToken(config);
       if (refreshed) {
         // Retry with new token
-        const retry = await fetch(`${config.apiUrl}/api/bookmarks`, {
+        const retry = await fetch(`${API_URL}/api/bookmarks`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -87,13 +89,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 async function saveBookmark(data) {
   const config = await getConfig();
-  if (!config.apiUrl || !config.token) {
+  if (!config.token) {
     return { ok: false, error: "Not logged in" };
   }
 
   try {
     let token = config.token;
-    let res = await fetch(`${config.apiUrl}/api/bookmarks`, {
+    let res = await fetch(`${API_URL}/api/bookmarks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -105,7 +107,7 @@ async function saveBookmark(data) {
     if (res.status === 401) {
       token = await refreshToken(config);
       if (!token) return { ok: false, error: "Session expired" };
-      res = await fetch(`${config.apiUrl}/api/bookmarks`, {
+      res = await fetch(`${API_URL}/api/bookmarks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -125,7 +127,6 @@ async function saveBookmark(data) {
 
 async function getConfig() {
   const data = await chrome.storage.local.get([
-    "apiUrl",
     "token",
     "refreshToken",
     "supabaseUrl",
