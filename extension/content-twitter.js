@@ -2,12 +2,13 @@
 // Detects when you bookmark a tweet on x.com and saves it to Marks
 
 (function () {
+  const API_URL = "https://marks-drab.vercel.app";
   let config = null;
   let recentSaves = [];
 
   // Load config and recent saves
   chrome.storage.local.get(
-    ["apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey"],
+    ["token", "refreshToken", "supabaseUrl", "supabaseKey"],
     (data) => {
       config = data;
     },
@@ -26,7 +27,7 @@
   });
 
   function handleBookmarkClick(btn) {
-    if (!config?.token || !config?.apiUrl) return;
+    if (!config?.token) return;
 
     // Find the parent tweet article
     const article = btn.closest("article");
@@ -107,7 +108,7 @@
     const tags = [...new Set([...tweet.hashtags, "twitter"])];
 
     try {
-      const res = await fetch(`${config.apiUrl}/api/bookmarks`, {
+      const res = await fetch(`${API_URL}/api/bookmarks`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -126,7 +127,7 @@
         // Try refresh
         const refreshed = await refreshToken();
         if (refreshed) {
-          await fetch(`${config.apiUrl}/api/bookmarks`, {
+          await fetch(`${API_URL}/api/bookmarks`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
