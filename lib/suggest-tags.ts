@@ -78,11 +78,25 @@ export async function suggestTags(
     }
   }
 
-  // Sort by score and return top 5
-  return [...candidates.entries()]
+  // Sort by score and return top results
+  const sorted = [...candidates.entries()]
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
     .map(([tag]) => tag);
+
+  // Deduplicate: remove single-word tags that are part of a higher-ranked multi-word tag
+  // e.g., if "real estate" ranks higher, remove standalone "real" and "estate"
+  const results: string[] = [];
+  for (const tag of sorted) {
+    if (results.length >= 5) break;
+    const isPartOfExisting = results.some(
+      (existing) => existing.includes(" ") && existing.includes(tag),
+    );
+    if (!isPartOfExisting) {
+      results.push(tag);
+    }
+  }
+
+  return results;
 }
 
 /** Build candidates from URL alone (no fetch needed). Exported for testing. */
