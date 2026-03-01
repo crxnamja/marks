@@ -163,7 +163,6 @@ console.log("\n6. Scoring: meta keywords outrank URL path segments");
   addUrlKeywords("https://example.com/random-path", candidates);
   addMetaKeywords(
     `<html><head><meta name="keywords" content="docker, containers"></head><body></body></html>`,
-    "https://example.com/random-path",
     candidates,
   );
   const dockerScore = candidates.get("docker") ?? 0;
