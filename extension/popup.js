@@ -1,3 +1,5 @@
+const API_URL = "https://marks-drab.vercel.app";
+
 const loginView = document.getElementById("login-view");
 const saveView = document.getElementById("save-view");
 const loginForm = document.getElementById("login-form");
@@ -14,17 +16,13 @@ let config = {};
 // Init
 document.addEventListener("DOMContentLoaded", async () => {
   config = await chrome.storage.local.get([
-    "apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey",
+    "token", "refreshToken", "supabaseUrl", "supabaseKey",
   ]);
 
-  if (config.token && config.apiUrl) {
+  if (config.token) {
     showSaveView();
   } else {
     loginView.style.display = "block";
-    // Restore saved API URL
-    if (config.apiUrl) {
-      document.getElementById("api-url").value = config.apiUrl;
-    }
   }
 });
 
@@ -37,15 +35,14 @@ loginForm.addEventListener("submit", async (e) => {
   btn.disabled = true;
   btn.textContent = "Signing in...";
 
-  const apiUrl = document.getElementById("api-url").value.replace(/\/$/, "");
   const email = document.getElementById("email").value;
   const password = document.getElementById("password").value;
 
   try {
     // Discover Supabase config from the app's page source
-    const supabaseUrl = await discoverSupabaseUrl(apiUrl);
+    const supabaseUrl = await discoverSupabaseUrl(API_URL);
     if (!supabaseUrl) {
-      throw new Error("Could not find Supabase config. Check your Marks URL.");
+      throw new Error("Could not connect to Marks.");
     }
 
     // Sign in via Supabase REST API
@@ -65,7 +62,6 @@ loginForm.addEventListener("submit", async (e) => {
 
     const data = await res.json();
     await chrome.storage.local.set({
-      apiUrl,
       token: data.access_token,
       refreshToken: data.refresh_token,
       supabaseUrl: supabaseUrl.url,
@@ -73,7 +69,7 @@ loginForm.addEventListener("submit", async (e) => {
     });
 
     config = await chrome.storage.local.get([
-      "apiUrl", "token", "refreshToken", "supabaseUrl", "supabaseKey",
+      "token", "refreshToken", "supabaseUrl", "supabaseKey",
     ]);
     loginView.style.display = "none";
     showSaveView();
@@ -85,10 +81,10 @@ loginForm.addEventListener("submit", async (e) => {
   }
 });
 
-async function discoverSupabaseUrl(apiUrl) {
+async function discoverSupabaseUrl(appUrl) {
   try {
     // Fetch the app's HTML and look for Supabase env vars in the JS bundles
-    const res = await fetch(apiUrl);
+    const res = await fetch(appUrl);
     const html = await res.text();
 
     // Next.js inlines NEXT_PUBLIC_ vars — look for the Supabase URL pattern
@@ -126,7 +122,7 @@ async function showSaveView() {
   }
 
   // Fetch suggested tags
-  if (tab?.url && config.apiUrl && config.token) {
+  if (tab?.url && config.token) {
     fetchSuggestedTags(tab.url);
   }
 }
@@ -135,7 +131,7 @@ async function fetchSuggestedTags(url) {
   suggestedTagsEl.style.display = "none";
   try {
     const res = await fetch(
-      `${config.apiUrl}/api/suggest-tags?url=${encodeURIComponent(url)}`,
+      `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
       { headers: { Authorization: `Bearer ${config.token}` } },
     );
     if (!res.ok) return;
