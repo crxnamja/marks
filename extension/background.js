@@ -18,7 +18,6 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const config = await getConfig();
   if (!config.token) {
-    // Open popup for login
     chrome.action.openPopup();
     return;
   }
@@ -29,39 +28,39 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!url) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/bookmarks`, {
+    let token = config.token;
+    let res = await fetch(`${API_URL}/api/bookmarks`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${config.token}`,
+        Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({
-        url,
-        title: title || url,
-        is_read: false,
-      }),
+      body: JSON.stringify({ url, title: title || url, is_read: false }),
     });
 
     if (res.status === 401) {
-      // Token expired — try refresh
-      const refreshed = await refreshToken(config);
-      if (refreshed) {
-        // Retry with new token
-        const retry = await fetch(`${API_URL}/api/bookmarks`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${refreshed}`,
-          },
-          body: JSON.stringify({ url, title: title || url, is_read: false }),
-        });
-        if (!retry.ok) throw new Error("Save failed");
-      } else {
+      token = await refreshToken(config);
+      if (!token) {
         chrome.action.openPopup();
         return;
       }
-    } else if (!res.ok) {
-      throw new Error("Save failed");
+      res = await fetch(`${API_URL}/api/bookmarks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ url, title: title || url, is_read: false }),
+      });
+    }
+
+    if (!res.ok) throw new Error("Save failed");
+
+    const bookmark = await res.json();
+
+    // Capture page HTML and archive (for "save page", not "save link")
+    if (info.menuItemId === "save-page" && tab?.id) {
+      captureAndArchive(bookmark.id, token).catch(() => {});
     }
 
     // Show success badge briefly
