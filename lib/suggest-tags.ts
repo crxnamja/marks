@@ -38,12 +38,13 @@ export async function suggestTags(
   url: string,
   userTags?: string[],
 ): Promise<string[]> {
+  // Extract page metadata for AI context (and as fallback)
+  let title = "";
+  let description = "";
   const candidates = new Map<string, number>();
 
-  // Extract keywords from URL structure
   addUrlKeywords(url, candidates);
 
-  // Fetch page and extract metadata keywords
   try {
     const res = await fetch(url, {
       headers: FETCH_HEADERS,
@@ -54,27 +55,34 @@ export async function suggestTags(
     if (res.ok) {
       const html = await res.text();
       addMetaKeywords(html, candidates);
+      title = extractTitle(html);
+      description = extractDescription(html);
     }
   } catch {
     // If fetch fails, we still have URL-based suggestions
   }
 
-  // Boost candidates that match user's existing tags
+  // Try AI-powered suggestions first
+  try {
+    const { suggestBookmarkTags } = await import("@/lib/ai");
+    const aiTags = await suggestBookmarkTags(
+      url,
+      title,
+      description,
+      userTags ?? [],
+    );
+    if (aiTags.length > 0) return aiTags.slice(0, 5);
+  } catch {
+    // AI unavailable (no API key, network error, etc.) — fall back to pattern matching
+  }
+
+  // Fallback: pattern-matching approach
+  // Boost candidates that exactly match user's existing tags
   if (userTags?.length) {
     const userTagSet = new Set(userTags.map((t) => t.toLowerCase()));
     for (const [tag, score] of candidates) {
       if (userTagSet.has(tag)) {
         candidates.set(tag, score + 10);
-      }
-    }
-    for (const userTag of userTagSet) {
-      if (!candidates.has(userTag)) {
-        for (const [candidate] of candidates) {
-          if (candidate.includes(userTag) || userTag.includes(candidate)) {
-            candidates.set(userTag, (candidates.get(userTag) ?? 0) + 8);
-            break;
-          }
-        }
       }
     }
   }
@@ -85,7 +93,6 @@ export async function suggestTags(
     .map(([tag]) => tag);
 
   // Deduplicate: remove single-word tags that are part of a higher-ranked multi-word tag
-  // e.g., if "real estate" ranks higher, remove standalone "real" and "estate"
   const results: string[] = [];
   for (const tag of sorted) {
     if (results.length >= 5) break;
@@ -119,6 +126,24 @@ export function suggestTagsFromHtml(url: string, html: string): string[] {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([tag]) => tag);
+}
+
+/** Extract best title from HTML for AI context */
+function extractTitle(html: string): string {
+  return (
+    getTitle(html) ||
+    getMetaContent(html, "property", "og:title") ||
+    ""
+  );
+}
+
+/** Extract best description from HTML for AI context */
+function extractDescription(html: string): string {
+  return (
+    getMetaContent(html, "name", "description") ||
+    getMetaContent(html, "property", "og:description") ||
+    ""
+  );
 }
 
 export function addUrlKeywords(url: string, candidates: Map<string, number>) {
