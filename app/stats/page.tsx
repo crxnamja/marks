@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Stats = {
+  total_bookmarks_saved: number;
   total_articles_read: number;
   total_words_read: number;
   total_reading_seconds: number;
@@ -67,6 +68,7 @@ export default function StatsPage() {
             <Link href="/read">read later</Link>
             <Link href="/actions">actions</Link>
             <Link href="/stats">stats</Link>
+            <Link href="/add" className="nav-add">+ add</Link>
             <Link href="/settings" className="nav-settings">⚙</Link>
           </nav>
         </header>
@@ -88,12 +90,18 @@ export default function StatsPage() {
           <Link href="/read">read later</Link>
           <Link href="/actions">actions</Link>
           <Link href="/stats">stats</Link>
+            <Link href="/add" className="nav-add">+ add</Link>
+            <Link href="/settings" className="nav-settings">⚙</Link>
         </nav>
       </header>
 
       {stats ? (
         <>
           <div className="stats-grid">
+            <div className="stat-card">
+              <span className="stat-value">{stats.total_bookmarks_saved}</span>
+              <span className="stat-label">articles saved</span>
+            </div>
             <div className="stat-card">
               <span className="stat-value">{stats.total_articles_read}</span>
               <span className="stat-label">articles read</span>
