@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { getBookmarks, getAllTags } from "@/lib/db";
 import { SearchBar } from "./search-bar";
 import { Bookmarklet } from "./bookmarklet";
 import { BookmarkItem } from "./bookmark-item";
+import { ConfirmBanner } from "./confirm-banner";
 
 export default async function Home({
   searchParams,
@@ -37,6 +39,10 @@ export default async function Home({
           </form>
         </nav>
       </header>
+
+      <Suspense>
+        <ConfirmBanner />
+      </Suspense>
 
       <SearchBar />
 

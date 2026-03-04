@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-browser";
 
@@ -10,7 +9,6 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,8 +27,8 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/");
-    router.refresh();
+    // Redirect to home with banner flag
+    window.location.href = "/?confirm=1";
   }
 
   return (
