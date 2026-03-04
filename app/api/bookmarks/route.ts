@@ -98,9 +98,15 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(bookmark, { status: 201 });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[POST /api/bookmarks] error:", e);
+  } catch (e: unknown) {
+    // Supabase throws plain objects (PostgrestError) with .message, not Error instances
+    const msg =
+      e instanceof Error
+        ? e.message
+        : e && typeof e === "object" && "message" in e
+          ? String((e as { message: unknown }).message)
+          : JSON.stringify(e);
+    console.error("[POST /api/bookmarks] error:", msg);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
