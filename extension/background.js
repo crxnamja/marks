@@ -105,8 +105,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     getConfig().then(sendResponse);
     return true;
   }
-  if (msg.type === "fetch-archive") {
-    fetchViaBackgroundTab(msg.url, msg.bookmarkId).then(sendResponse);
+  // Reader page asks us to prepare for an archive capture
+  if (msg.type === "prepare-archive") {
+    chrome.storage.local.set({
+      pendingArchive: {
+        bookmarkId: msg.bookmarkId,
+        url: msg.url,
+        readerTabId: sender.tab?.id,
+      },
+    }).then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  // Content script on archive.today captured the HTML
+  if (msg.type === "archive-captured") {
+    processArchiveCapture(msg, sender.tab?.id).then(sendResponse);
     return true;
   }
 });
@@ -130,7 +142,7 @@ async function saveBookmark(data) {
 
     if (res.status === 401) {
       token = await refreshToken(config);
-      if (!token) return { ok: false, error: "Session expired" };
+      if (!token) return { ok: false, error: "Session expired — please sign in again" };
       res = await fetch(`${API_URL}/api/bookmarks`, {
         method: "POST",
         headers: {
@@ -141,7 +153,10 @@ async function saveBookmark(data) {
       });
     }
 
-    if (!res.ok) return { ok: false, error: "Save failed" };
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      return { ok: false, error: errData.error || `Save failed (${res.status})` };
+    }
     const bookmark = await res.json();
 
     // Fire-and-forget: capture page HTML and archive it
@@ -166,7 +181,7 @@ async function captureAndArchive(bookmarkId, token, url) {
     const html = results?.[0]?.result;
     if (!html || html.length < 500) return;
 
-    const res = await fetch(`${API_URL}/api/bookmarks/${bookmarkId}/archive`, {
+    await fetch(`${API_URL}/api/bookmarks/${bookmarkId}/archive`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -174,101 +189,78 @@ async function captureAndArchive(bookmarkId, token, url) {
       },
       body: JSON.stringify({ page_html: html }),
     });
-
-    // If server-side extraction got thin/no content, try archive.ph via background tab
-    if (!res.ok && url) {
-      console.log("[Marks] Direct archive failed, trying archive.ph via background tab");
-      await fetchViaBackgroundTab(url, bookmarkId);
-    }
   } catch (e) {
     console.log("[Marks] captureAndArchive error:", e);
   }
 }
 
-async function fetchViaBackgroundTab(url, bookmarkId) {
+// Called when content-archive.js on archive.today captures page HTML
+async function processArchiveCapture(msg, archiveTabId) {
+  const { pendingArchive } = await chrome.storage.local.get("pendingArchive");
+  const readerTabId = pendingArchive?.readerTabId;
+  const bookmarkId = msg.bookmarkId;
+
+  await chrome.storage.local.remove("pendingArchive");
+
+  // Close the archive.today tab and restore focus to reader
+  if (archiveTabId) await chrome.tabs.remove(archiveTabId).catch(() => {});
+  if (readerTabId) await chrome.tabs.update(readerTabId, { active: true }).catch(() => {});
+
+  if (!msg.html || msg.html.length < 1000) {
+    notifyReaderTab(readerTabId, false, "No content captured from archive page");
+    return { ok: false };
+  }
+
   const config = await getConfig();
   let token = config.token;
-  if (!token) return { ok: false, error: "Not logged in" };
+  if (!token) {
+    notifyReaderTab(readerTabId, false, "Not logged in");
+    return { ok: false };
+  }
 
-  let tab;
   try {
-    const archiveUrl = `https://archive.ph/newest/${url}`;
-    tab = await chrome.tabs.create({ url: archiveUrl, active: false });
-
-    // archive.ph has Cloudflare protection that fires multiple page loads:
-    // 1. Challenge page loads → "complete"
-    // 2. JS solves challenge, redirects → "complete"
-    // 3. Actual archived page loads → "complete"
-    // Wait until no new "complete" events for 3s (page has settled)
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        chrome.tabs.onUpdated.removeListener(listener);
-        resolve(); // try to capture whatever we have
-      }, 45000);
-
-      let settleTimer = null;
-
-      function listener(tabId, changeInfo) {
-        if (tabId !== tab.id) return;
-        if (changeInfo.status === "complete") {
-          clearTimeout(settleTimer);
-          settleTimer = setTimeout(() => {
-            chrome.tabs.onUpdated.removeListener(listener);
-            clearTimeout(timeout);
-            resolve();
-          }, 3000);
-        }
-      }
-
-      chrome.tabs.onUpdated.addListener(listener);
-    });
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => document.documentElement.outerHTML,
-    });
-
-    await chrome.tabs.remove(tab.id).catch(() => {});
-    tab = null;
-
-    const html = results?.[0]?.result;
-    if (!html || html.length < 500) {
-      return { ok: false, error: "No content from archive.ph" };
-    }
-
-    // Check if we captured a CAPTCHA page instead of actual content
-    if (html.includes("g-recaptcha") || html.includes("chk_captcha")) {
-      return { ok: false, error: "archive.ph CAPTCHA — visit archive.ph in your browser first" };
-    }
-
     let res = await fetch(`${API_URL}/api/bookmarks/${bookmarkId}/archive`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ page_html: html }),
+      body: JSON.stringify({ page_html: msg.html }),
     });
 
     if (res.status === 401) {
       token = await refreshToken(config);
-      if (!token) return { ok: false, error: "Session expired" };
+      if (!token) {
+        notifyReaderTab(readerTabId, false, "Session expired");
+        return { ok: false };
+      }
       res = await fetch(`${API_URL}/api/bookmarks/${bookmarkId}/archive`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ page_html: html }),
+        body: JSON.stringify({ page_html: msg.html }),
       });
     }
 
-    if (!res.ok) return { ok: false, error: "Archive save failed" };
-    return { ok: true };
+    const ok = res.ok;
+    if (!ok) {
+      const errData = await res.json().catch(() => ({}));
+      notifyReaderTab(readerTabId, false, errData.error || "Extraction failed");
+    } else {
+      notifyReaderTab(readerTabId, true);
+    }
+    return { ok };
   } catch (e) {
-    if (tab) await chrome.tabs.remove(tab.id).catch(() => {});
-    return { ok: false, error: e.message };
+    notifyReaderTab(readerTabId, false, e.message);
+    return { ok: false };
   }
+}
+
+function notifyReaderTab(tabId, ok, error) {
+  if (!tabId) return;
+  chrome.tabs.sendMessage(tabId, { type: "archive-done", ok, error }).catch(() => {});
 }
 
 async function fetchSuggestedTags(url) {
@@ -310,6 +302,8 @@ async function getConfig() {
 
 async function refreshToken(config) {
   if (!config.refreshToken || !config.supabaseUrl || !config.supabaseKey) {
+    // No credentials — clear stale token so popup shows login
+    await chrome.storage.local.remove(["token", "refreshToken"]);
     return null;
   }
 
@@ -323,7 +317,11 @@ async function refreshToken(config) {
       body: JSON.stringify({ refresh_token: config.refreshToken }),
     });
 
-    if (!res.ok) return null;
+    if (!res.ok) {
+      // Refresh token expired — clear tokens so popup shows login
+      await chrome.storage.local.remove(["token", "refreshToken"]);
+      return null;
+    }
     const data = await res.json();
 
     await chrome.storage.local.set({
