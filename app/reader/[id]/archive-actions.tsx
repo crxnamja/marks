@@ -60,14 +60,9 @@ export function ArchiveActions({
     try {
       // "try web archive" with extension installed
       if (forceArchive && hasExtension()) {
-        // 1. Open archive.today FIRST — must be synchronous with click to avoid popup blocker
+        // Tell extension to open archive.today tab and prepare for capture
+        // (extension uses chrome.tabs.create which isn't blocked by popup blockers)
         setStatus("Opening archive.today…");
-        window.open(
-          `https://archive.today/?run=1&url=${encodeURIComponent(bookmarkUrl)}`,
-          "_blank",
-        );
-
-        // 2. Tell extension to prepare (stores bookmarkId + readerTabId)
         window.postMessage({
           type: "marks:prepare-archive",
           bookmarkId,
