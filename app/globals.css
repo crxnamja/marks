@@ -1270,6 +1270,15 @@ header nav .nav-add {
   color: var(--text-muted);
 }
 
+.import-help-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.import-help-link:hover {
+  text-decoration: underline;
+}
+
 .import-upload-btn {
   display: inline-block;
   padding: 0.5rem 1rem;
