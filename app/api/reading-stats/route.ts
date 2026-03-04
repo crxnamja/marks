@@ -8,13 +8,22 @@ export async function GET() {
     const user = await requireUser();
     const supabase = await createClient();
 
+    // Count total bookmarks saved (always works regardless of reading_sessions)
+    const { count: totalSaved } = await supabase
+      .from("bookmarks")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
     // Try the RPC first
     const { data, error } = await supabase.rpc("get_reading_stats", {
       user_uuid: user.id,
     });
 
     if (!error && data) {
-      return NextResponse.json(data);
+      return NextResponse.json({
+        ...data,
+        total_bookmarks_saved: totalSaved ?? 0,
+      });
     }
 
     // Fallback: query directly if RPC doesn't exist yet
@@ -25,6 +34,7 @@ export async function GET() {
 
     if (!sessions || sessions.length === 0) {
       return NextResponse.json({
+        total_bookmarks_saved: totalSaved ?? 0,
         total_articles_read: 0,
         total_words_read: 0,
         total_reading_seconds: 0,
@@ -87,6 +97,7 @@ export async function GET() {
       }));
 
     return NextResponse.json({
+      total_bookmarks_saved: totalSaved ?? 0,
       total_articles_read: uniqueArticles.size,
       total_words_read: meaningful.reduce((sum, s) => sum + s.word_count, 0),
       total_reading_seconds: sessions.reduce(
