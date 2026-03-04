@@ -92,7 +92,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(bookmark, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    if (msg === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    console.error("[POST /api/bookmarks] error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
