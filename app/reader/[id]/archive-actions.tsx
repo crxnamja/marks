@@ -30,38 +30,26 @@ export function ArchiveActions({
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Check if extension is present right now via injected window property */
   function hasExtension(): boolean {
     return window.__marks_extension === true;
   }
 
-  /** Ask extension to fetch URL via archive.ph background tab */
-  async function fetchViaExtension(): Promise<{
-    ok: boolean;
-    error?: string;
-  }> {
+  /** Wait for the extension to signal archive capture is done */
+  function waitForArchiveDone(): Promise<{ ok: boolean; error?: string }> {
     return new Promise((resolve) => {
       const timeout = setTimeout(
-        () => resolve({ ok: false, error: "Timed out fetching from archive.ph" }),
-        60000,
+        () => resolve({ ok: false, error: "Timed out — try refreshing the page" }),
+        90000,
       );
 
-      function onResult(event: MessageEvent) {
-        if (event.data?.type !== "marks:fetch-archive-result") return;
-        window.removeEventListener("message", onResult);
+      function onDone(event: MessageEvent) {
+        if (event.data?.type !== "marks:archive-done") return;
+        window.removeEventListener("message", onDone);
         clearTimeout(timeout);
-        resolve({
-          ok: event.data.ok === true,
-          error: event.data.error,
-        });
+        resolve({ ok: event.data.ok, error: event.data.error });
       }
 
-      window.addEventListener("message", onResult);
-      window.postMessage({
-        type: "marks:fetch-archive",
-        bookmarkId,
-        url: bookmarkUrl,
-      });
+      window.addEventListener("message", onDone);
     });
   }
 
@@ -70,22 +58,38 @@ export function ArchiveActions({
     setError("");
 
     try {
-      // "try web archive" with extension → go straight to extension
+      // "try web archive" with extension installed
       if (forceArchive && hasExtension()) {
-        setStatus("Fetching via archive.ph…");
-        const result = await fetchViaExtension();
-        if (result.ok) {
-          setStatus("");
-          setLoading(false);
-          router.refresh();
-          return;
-        }
-        setError(result.error ?? "Could not fetch from archive.ph");
+        // 1. Tell extension to prepare (stores bookmarkId + readerTabId)
+        window.postMessage({
+          type: "marks:prepare-archive",
+          bookmarkId,
+          url: bookmarkUrl,
+        });
+        await new Promise((r) => setTimeout(r, 300));
+
+        // 2. Open archive.today directly — user sees it load
+        setStatus("Opening archive.today…");
+        window.open(
+          `https://archive.today/?run=1&url=${encodeURIComponent(bookmarkUrl)}`,
+          "_blank",
+        );
+
+        // 3. Wait for extension to capture, send to server, and notify us
+        setStatus("Capturing from archive.today…");
+        const result = await waitForArchiveDone();
+
         setStatus("");
         setLoading(false);
+        if (result.ok) {
+          router.refresh();
+        } else {
+          setError(result.error ?? "Could not capture from archive.today");
+        }
         return;
       }
 
+      // Server-side extraction path
       setStatus(forceArchive ? "Trying web archives…" : "Extracting…");
 
       const res = await fetch(`/api/bookmarks/${bookmarkId}/archive`, {
@@ -98,22 +102,6 @@ export function ArchiveActions({
         setStatus("");
         setLoading(false);
         router.refresh();
-        return;
-      }
-
-      // Server-side failed — try via extension
-      if (hasExtension()) {
-        setStatus("Fetching via archive.ph…");
-        const result = await fetchViaExtension();
-        if (result.ok) {
-          setStatus("");
-          setLoading(false);
-          router.refresh();
-          return;
-        }
-        setError(result.error ?? "Could not fetch from archive.ph");
-        setStatus("");
-        setLoading(false);
         return;
       }
 
