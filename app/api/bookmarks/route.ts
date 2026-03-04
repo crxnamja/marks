@@ -58,11 +58,10 @@ export async function POST(req: NextRequest) {
       type_metadata: body.type_metadata ?? {},
     });
 
+    // Auto-archive: trigger archive endpoint as a separate serverless invocation
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://marks-drab.vercel.app";
     const authHeader = req.headers.get("authorization") || "";
-
-    // Auto-archive article content in background (fire-and-forget)
     fetch(`${appUrl}/api/bookmarks/${bookmark.id}/archive`, {
       method: "POST",
       headers: {
@@ -72,32 +71,19 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({ force_archive: false }),
     }).catch(() => {});
 
-    // Auto-suggest tags in background if none provided
+    // Auto-suggest tags if none provided
     if (!body.tags || body.tags.length === 0) {
-      (async () => {
-        try {
-          const { suggestTags } = await import("@/lib/suggest-tags");
-          const existingTags = await getAllTags();
-          const tagNames = existingTags.map((t) => t.name);
-          const suggested = await suggestTags(body.url, tagNames);
-          if (suggested.length > 0) {
-            await setBookmarkTags(bookmark.id, suggested);
-          }
-        } catch {
-          // tag suggestion failed, not critical
+      try {
+        const { suggestTags } = await import("@/lib/suggest-tags");
+        const existingTags = await getAllTags();
+        const tagNames = existingTags.map((t) => t.name);
+        const suggested = await suggestTags(body.url, tagNames);
+        if (suggested.length > 0) {
+          await setBookmarkTags(bookmark.id, suggested);
         }
-      })();
-    }
-
-    // Auto-enrich Twitter bookmarks in background (fire-and-forget)
-    if (type === "tweet") {
-      fetch(`${appUrl}/api/bookmarks/${bookmark.id}/enrich`, {
-        method: "POST",
-        headers: {
-          Authorization: authHeader,
-          "Content-Type": "application/json",
-        },
-      }).catch(() => {});
+      } catch {
+        // tag suggestion failed, not critical
+      }
     }
 
     return NextResponse.json(bookmark, { status: 201 });
