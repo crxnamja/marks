@@ -60,20 +60,19 @@ export function ArchiveActions({
     try {
       // "try web archive" with extension installed
       if (forceArchive && hasExtension()) {
-        // 1. Tell extension to prepare (stores bookmarkId + readerTabId)
-        window.postMessage({
-          type: "marks:prepare-archive",
-          bookmarkId,
-          url: bookmarkUrl,
-        });
-        await new Promise((r) => setTimeout(r, 300));
-
-        // 2. Open archive.today directly — user sees it load
+        // 1. Open archive.today FIRST — must be synchronous with click to avoid popup blocker
         setStatus("Opening archive.today…");
         window.open(
           `https://archive.today/?run=1&url=${encodeURIComponent(bookmarkUrl)}`,
           "_blank",
         );
+
+        // 2. Tell extension to prepare (stores bookmarkId + readerTabId)
+        window.postMessage({
+          type: "marks:prepare-archive",
+          bookmarkId,
+          url: bookmarkUrl,
+        });
 
         // 3. Wait for extension to capture, send to server, and notify us
         setStatus("Capturing from archive.today…");

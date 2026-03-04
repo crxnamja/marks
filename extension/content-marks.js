@@ -1,20 +1,8 @@
-// Content script for getmarks.sh reader pages
-// Bridges the web app and extension for archive.ph fetching via background tab
-//
-// NOTE: Content scripts run in an isolated world — they share the DOM but NOT
-// the window JS context with the page. So we inject a <script> tag to set a
-// property on the page's actual window object.
+// Content script for getmarks.sh reader pages (runs in ISOLATED world)
+// The MAIN world script (content-marks-main.js) sets window.__marks_extension.
+// This script handles message passing since only isolated world has chrome.runtime.
 
-// Set flag on the page's real window (not the isolated content script window)
-const marker = document.createElement("script");
-marker.textContent = "window.__marks_extension = true;";
-document.documentElement.appendChild(marker);
-marker.remove();
-
-// Also send postMessage (works cross-world via DOM)
-window.postMessage({ type: "marks:extension-ready" });
-
-// Listen for fetch-archive requests from the page
+// --- Messages FROM the page (React) → extension background ---
 window.addEventListener("message", async (event) => {
   if (event.source !== window) return;
 
@@ -23,27 +11,28 @@ window.addEventListener("message", async (event) => {
     return;
   }
 
-  if (event.data?.type !== "marks:fetch-archive") return;
+  // React asks us to prepare for an archive capture
+  if (event.data?.type === "marks:prepare-archive") {
+    try {
+      await chrome.runtime.sendMessage({
+        type: "prepare-archive",
+        bookmarkId: event.data.bookmarkId,
+        url: event.data.url,
+      });
+    } catch (e) {
+      console.error("[Marks] prepare-archive failed:", e);
+    }
+    return;
+  }
+});
 
-  const { bookmarkId, url } = event.data;
-
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: "fetch-archive",
-      bookmarkId,
-      url,
-    });
-
+// --- Messages FROM the background → page (React) ---
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.type === "archive-done") {
     window.postMessage({
-      type: "marks:fetch-archive-result",
-      ok: response?.ok ?? false,
-      error: response?.error,
-    });
-  } catch (e) {
-    window.postMessage({
-      type: "marks:fetch-archive-result",
-      ok: false,
-      error: e.message,
+      type: "marks:archive-done",
+      ok: msg.ok,
+      error: msg.error,
     });
   }
 });
