@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
-import { getBookmark, updateBookmark } from "@/lib/db";
+import { getBookmark, updateBookmark, getAllTags, setBookmarkTags } from "@/lib/db";
 import {
   extractArticle,
   extractViaArchive,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/extract";
 import { createClient } from "@/lib/supabase-server";
 import { uploadToStorage } from "@/lib/storage";
+import { enrichArticle, enrichTweet } from "@/lib/ai";
 
 export const maxDuration = 60;
 
@@ -71,61 +72,108 @@ export async function POST(req: NextRequest, { params }: Params) {
     // Mark bookmark as archived
     await updateBookmark(id, { is_archived: true });
 
-    // Upload HTML archive to Supabase Storage as durable backup (fire-and-forget)
-    (async () => {
-      try {
+    // Upload HTML archive to Supabase Storage as durable backup
+    try {
+      await uploadToStorage(
+        user.id,
+        id,
+        "archive.html",
+        article.content_html,
+        "text/html",
+        "html_archive",
+        bookmark.url,
+      );
+
+      // Also store plain text for offline reading
+      if (article.content_text) {
         await uploadToStorage(
           user.id,
           id,
-          "archive.html",
-          article!.content_html,
-          "text/html",
-          "html_archive",
+          "content.txt",
+          article.content_text,
+          "text/plain",
+          "text_archive",
           bookmark.url,
         );
-
-        // Try to download and store og:image as thumbnail
-        const media = extractMediaUrls(article!.content_html);
-        const imageUrl = media.ogImage || media.images[0];
-        if (imageUrl) {
-          try {
-            const imgRes = await fetch(imageUrl, {
-              signal: AbortSignal.timeout(10000),
-            });
-            if (imgRes.ok) {
-              const buffer = Buffer.from(await imgRes.arrayBuffer());
-              const ct = imgRes.headers.get("content-type") || "image/jpeg";
-              const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
-              await uploadToStorage(
-                user.id,
-                id,
-                `thumbnail.${ext}`,
-                buffer,
-                ct,
-                "thumbnail",
-                imageUrl,
-              );
-            }
-          } catch {
-            // thumbnail download failed, not critical
-          }
-        }
-      } catch {
-        // storage upload failed, archive still works via Postgres
       }
-    })();
 
-    // Auto-enrich after successful archive (fire-and-forget)
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://marks-drab.vercel.app";
-    const authHeader = req.headers.get("authorization") || "";
-    fetch(`${appUrl}/api/bookmarks/${id}/enrich`, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    }).catch(() => {});
+      // Try to download and store og:image as thumbnail
+      const media = extractMediaUrls(article.content_html);
+      const imageUrl = media.ogImage || media.images[0];
+      if (imageUrl) {
+        try {
+          const imgRes = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(10000),
+          });
+          if (imgRes.ok) {
+            const buffer = Buffer.from(await imgRes.arrayBuffer());
+            const ct = imgRes.headers.get("content-type") || "image/jpeg";
+            const ext = ct.includes("png") ? "png" : ct.includes("webp") ? "webp" : "jpg";
+            await uploadToStorage(
+              user.id,
+              id,
+              `thumbnail.${ext}`,
+              buffer,
+              ct,
+              "thumbnail",
+              imageUrl,
+            );
+          }
+        } catch {
+          // thumbnail download failed, not critical
+        }
+      }
+    } catch (storageErr) {
+      console.error("Storage upload error:", storageErr);
+      // storage upload failed, archive still works via Postgres
+    }
+
+    // Auto-enrich after successful archive (inline, not fire-and-forget)
+    try {
+      const existingTags = await getAllTags();
+      const tagNames = existingTags.map((t) => t.name);
+
+      let enrichment: {
+        summary: string;
+        action_items: { text: string }[];
+        tags: string[];
+      };
+
+      if (bookmark.type === "tweet") {
+        const tweetText = bookmark.description || bookmark.title || "";
+        const handleMatch = bookmark.title.match(/^@(\w+):/);
+        const handle = handleMatch?.[1] || "";
+        enrichment = await enrichTweet(tweetText, handle, tagNames);
+      } else {
+        const contentText = article.content_text || bookmark.description || "";
+        enrichment = await enrichArticle(contentText, bookmark.title, tagNames);
+      }
+
+      // Upsert enrichment data
+      await supabase.from("bookmark_enrichments").upsert(
+        {
+          bookmark_id: id,
+          summary: enrichment.summary,
+          action_items: enrichment.action_items.map((a) => ({
+            text: a.text,
+            completed: false,
+            created_at: new Date().toISOString(),
+          })),
+          ai_tags: enrichment.tags,
+          model: "claude-haiku-4-20250214",
+          processed_at: new Date().toISOString(),
+        },
+        { onConflict: "bookmark_id" },
+      );
+
+      // Merge AI tags into bookmark's tags
+      const currentTags = bookmark.tags ?? [];
+      const mergedTags = [...new Set([...currentTags, ...enrichment.tags])];
+      await setBookmarkTags(id, mergedTags);
+    } catch (enrichErr) {
+      console.error("Enrichment error:", enrichErr);
+      // enrichment failed, archive still succeeded
+    }
 
     return NextResponse.json({
       ok: true,
