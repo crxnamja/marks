@@ -39,9 +39,11 @@ const FETCH_HEADERS = {
 export async function suggestTags(
   url: string,
   userTags?: string[],
+  providedTitle?: string,
 ): Promise<string[]> {
   // Extract page metadata for AI context (and as fallback)
-  let title = "";
+  // Use provided title as starting point (useful for SPAs like x.com where server fetch fails)
+  let title = providedTitle || "";
   let description = "";
   const candidates = new Map<string, number>();
 

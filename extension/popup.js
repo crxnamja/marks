@@ -107,19 +107,21 @@ async function showSaveView() {
     document.getElementById("title").value = title;
   }
 
-  // Fetch suggested tags
+  // Fetch suggested tags (pass title for better AI context on SPAs like x.com)
   if (tab?.url && config.token) {
-    fetchSuggestedTags(tab.url);
+    const titleVal = document.getElementById("title").value || "";
+    fetchSuggestedTags(tab.url, titleVal);
   }
 }
 
-async function fetchSuggestedTags(url) {
+async function fetchSuggestedTags(url, title) {
   suggestedTagsEl.style.display = "none";
   try {
     // Route through background service worker for auth + CORS handling
     const data = await chrome.runtime.sendMessage({
       type: "suggest-tags",
       url,
+      title: title || "",
     });
     if (data.tags?.length > 0) {
       // Clear old suggestions
