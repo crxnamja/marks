@@ -100,7 +100,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true; // async
   }
   if (msg.type === "suggest-tags") {
-    fetchSuggestedTags(msg.url)
+    fetchSuggestedTags(msg.url, msg.title)
       .then(sendResponse)
       .catch(() => sendResponse({ tags: [] }));
     return true;
@@ -269,14 +269,16 @@ function notifyReaderTab(tabId, ok, error) {
   chrome.tabs.sendMessage(tabId, { type: "archive-done", ok, error }).catch(() => {});
 }
 
-async function fetchSuggestedTags(url) {
+async function fetchSuggestedTags(url, title) {
   const config = await getConfig();
   if (!config.token) return { tags: [] };
 
   try {
     let token = config.token;
+    const params = new URLSearchParams({ url });
+    if (title) params.set("title", title);
     let res = await fetch(
-      `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
+      `${API_URL}/api/suggest-tags?${params}`,
       { headers: { Authorization: `Bearer ${token}` } },
     );
 
@@ -284,7 +286,7 @@ async function fetchSuggestedTags(url) {
       token = await refreshToken(config);
       if (!token) return { tags: [] };
       res = await fetch(
-        `${API_URL}/api/suggest-tags?url=${encodeURIComponent(url)}`,
+        `${API_URL}/api/suggest-tags?${params}`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
     }

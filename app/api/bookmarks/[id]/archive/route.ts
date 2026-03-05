@@ -26,14 +26,89 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Tweets don't need article archiving — content is in description/type_metadata
-    if (bookmark.type === "tweet") {
-      return NextResponse.json({ ok: true, source: "tweet", word_count: 0, excerpt: "" });
-    }
-
     const body = await req.json().catch(() => ({}));
     const forceArchive = body.force_archive === true;
     const pageHtml = body.page_html as string | undefined;
+
+    // Archive tweets: preserve text + download media images as durable backup
+    if (bookmark.type === "tweet") {
+      const supabase = await createClient();
+      const tweetText = bookmark.description || bookmark.title || "";
+      const author = bookmark.type_metadata?.author
+        ? String(bookmark.type_metadata.author)
+        : "";
+      const wordCount = tweetText.split(/\s+/).filter(Boolean).length;
+
+      // Build HTML representation of the tweet
+      const tweetHtml = `<blockquote><p>${tweetText.replace(/\n/g, "<br>")}</p>${author ? `<footer>— @${author}</footer>` : ""}</blockquote>`;
+
+      await supabase.from("archived_content").upsert(
+        {
+          bookmark_id: id,
+          content_html: tweetHtml,
+          content_text: tweetText,
+          excerpt: tweetText.slice(0, 200),
+          byline: author ? `@${author}` : null,
+          word_count: wordCount,
+          source: "tweet",
+        },
+        { onConflict: "bookmark_id" },
+      );
+
+      await updateBookmark(id, { is_archived: true });
+
+      // Store tweet text and download media images to durable storage
+      try {
+        await uploadToStorage(
+          user.id,
+          id,
+          "content.txt",
+          tweetText,
+          "text/plain",
+          "text_archive",
+          bookmark.url,
+        );
+
+        // Download and store tweet media images
+        const mediaUrls = (bookmark.type_metadata?.media_urls as string[]) ?? [];
+        for (let i = 0; i < mediaUrls.length; i++) {
+          try {
+            const imgRes = await fetch(mediaUrls[i], {
+              signal: AbortSignal.timeout(10000),
+            });
+            if (imgRes.ok) {
+              const buffer = Buffer.from(await imgRes.arrayBuffer());
+              const ct = imgRes.headers.get("content-type") || "image/jpeg";
+              const ext = ct.includes("png")
+                ? "png"
+                : ct.includes("webp")
+                  ? "webp"
+                  : "jpg";
+              await uploadToStorage(
+                user.id,
+                id,
+                `media-${i}.${ext}`,
+                buffer,
+                ct,
+                "tweet_media",
+                mediaUrls[i],
+              );
+            }
+          } catch {
+            // individual image download failed, continue with others
+          }
+        }
+      } catch (storageErr) {
+        console.error("Tweet storage error:", storageErr);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        source: "tweet",
+        word_count: wordCount,
+        excerpt: tweetText.slice(0, 200),
+      });
+    }
 
     // If pre-fetched HTML provided (e.g. from Chrome extension), parse it directly
     // Otherwise fall back to server-side fetch

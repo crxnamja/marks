@@ -12,11 +12,13 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "URL required" }, { status: 400 });
     }
 
+    const title = req.nextUrl.searchParams.get("title") || "";
+
     // Fetch user's existing tags to boost relevant matches
     const existingTags = await getAllTags();
     const tagNames = existingTags.map((t) => t.name);
 
-    const tags = await suggestTags(url, tagNames);
+    const tags = await suggestTags(url, tagNames, title);
     return NextResponse.json({ tags });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
