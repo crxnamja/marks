@@ -45,6 +45,8 @@ const MEDIA_LABELS: Record<string, string> = {
   html_archive: "Article HTML",
   text_archive: "Article text",
   thumbnail: "Thumbnail",
+  pdf_upload: "PDF",
+  tweet_media: "Tweet media",
 };
 
 export default function SettingsPage() {
@@ -55,6 +57,11 @@ export default function SettingsPage() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<{ id: number; title: string } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     Promise.all([
@@ -101,6 +108,38 @@ export default function SettingsPage() {
       setImporting(false);
       // Reset file input so the same file can be re-selected
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handlePdfUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadResult(null);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload-pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setUploadError(data.error || "Upload failed");
+      } else {
+        setUploadResult({ id: data.bookmark.id, title: data.bookmark.title });
+      }
+    } catch {
+      setUploadError("Failed to upload PDF");
+    } finally {
+      setUploading(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
     }
   }
 
@@ -166,6 +205,34 @@ export default function SettingsPage() {
         )}
         {importError && (
           <div className="import-result import-error">{importError}</div>
+        )}
+      </div>
+
+      <div className="settings-section">
+        <h2 className="settings-heading">Upload PDF</h2>
+        <p className="settings-description">
+          Upload a PDF to read later. 50 MB max.
+        </p>
+        <label className="import-upload-btn">
+          {uploading ? "Uploading..." : "Choose PDF"}
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf,application/pdf"
+            onChange={handlePdfUpload}
+            disabled={uploading}
+            hidden
+          />
+        </label>
+
+        {uploadResult && (
+          <div className="import-result import-success">
+            Uploaded{" "}
+            <a href={`/reader/${uploadResult.id}`}>{uploadResult.title}</a>
+          </div>
+        )}
+        {uploadError && (
+          <div className="import-result import-error">{uploadError}</div>
         )}
       </div>
 
