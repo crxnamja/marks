@@ -137,6 +137,21 @@ export default async function ReaderPage({ params }: Props) {
               />
             )}
           </div>
+        ) : bookmark.type === "pdf" ? (
+          <div className="reader-pdf">
+            <iframe
+              src={`/api/pdf/${id}`}
+              title={bookmark.title || "PDF"}
+            />
+            <a
+              href={`/api/pdf/${id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="reader-pdf-download"
+            >
+              Download PDF
+            </a>
+          </div>
         ) : bookmark.type === "image" ? (
           <div className="reader-image">
             {/* eslint-disable-next-line @next/next/no-img-element */}

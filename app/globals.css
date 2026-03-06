@@ -814,6 +814,24 @@ header nav .nav-add {
   background: var(--accent-hover);
 }
 
+.reader-pdf {
+  margin-top: 1.5rem;
+}
+
+.reader-pdf iframe {
+  width: 100%;
+  height: 80vh;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.reader-pdf-download {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--link);
+}
+
 .reader-image {
   margin-top: 1.5rem;
   text-align: center;
