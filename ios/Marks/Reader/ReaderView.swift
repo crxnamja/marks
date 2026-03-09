@@ -9,18 +9,16 @@ struct ReaderView: View {
         Group {
             if let cached = bookmark.cachedContent, let html = cached.html {
                 ReaderWebView(html: wrapHTML(html, title: bookmark.title))
+            } else if let url = URL(string: bookmark.url) {
+                LiveWebView(url: url)
             } else {
                 VStack(spacing: 16) {
                     Image(systemName: "doc.text")
                         .font(.system(size: 48))
                         .foregroundStyle(.secondary)
-                    Text("No cached content")
+                    Text("Unable to load content")
                         .font(.headline)
-                    Text("Open the original page to read this bookmark.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    Button("Open Original") {
+                    Button("Open in Safari") {
                         showingSafari = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -94,6 +92,23 @@ struct ReaderWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         webView.loadHTMLString(html, baseURL: nil)
+    }
+}
+
+struct LiveWebView: UIViewRepresentable {
+    let url: URL
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: config)
+        webView.scrollView.contentInsetAdjustmentBehavior = .always
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        if webView.url == nil {
+            webView.load(URLRequest(url: url))
+        }
     }
 }
 
