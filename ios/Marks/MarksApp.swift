@@ -8,8 +8,7 @@ struct MarksApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([Bookmark.self, CachedContent.self])
         let config = ModelConfiguration(
-            schema: schema,
-            groupContainer: .identifier(Config.appGroupID)
+            schema: schema
         )
         do {
             return try ModelContainer(for: schema, configurations: [config])
