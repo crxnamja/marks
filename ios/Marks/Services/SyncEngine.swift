@@ -67,7 +67,7 @@ final class SyncEngine {
                 existing.url = row.url
                 existing.title = row.title
                 existing.desc = row.description ?? ""
-                existing.tags = row.tags ?? []
+                existing.tags = row.tags
                 existing.type = row.type
                 existing.isRead = row.is_read ?? false
                 existing.isArchived = row.is_archived ?? false
@@ -92,7 +92,7 @@ final class SyncEngine {
                     url: row.url,
                     title: row.title,
                     desc: row.description ?? "",
-                    tags: row.tags ?? [],
+                    tags: row.tags,
                     type: row.type,
                     isRead: row.is_read ?? false,
                     isArchived: row.is_archived ?? false,

@@ -126,18 +126,26 @@ final class SupabaseService {
         let content_text: String?
     }
 
+    struct TagJoinRow: Decodable {
+        let tags: TagNameRow
+    }
+
+    struct TagNameRow: Decodable {
+        let name: String
+    }
+
     struct BookmarkRow: Decodable {
         let id: Int
         let url: String
         let title: String
         let description: String?
-        let tags: [String]?
         let type: String?
         let is_read: Bool?
         let is_archived: Bool?
         let created_at: String
         let updated_at: String?
         let archived_content: [ArchivedContentRow]?
+        let bookmark_tags: [TagJoinRow]?
 
         var content_html: String? {
             archived_content?.first?.content_html
@@ -145,11 +153,14 @@ final class SupabaseService {
         var content_text: String? {
             archived_content?.first?.content_text
         }
+        var tags: [String] {
+            bookmark_tags?.map { $0.tags.name } ?? []
+        }
     }
 
     func fetchBookmarks(since: Date? = nil) async throws -> [BookmarkRow] {
         var query: [String: String] = [
-            "select": "*,archived_content(content_html,content_text)",
+            "select": "*,archived_content(content_html,content_text),bookmark_tags(tags(name))",
             "order": "created_at.desc"
         ]
         if let since {
