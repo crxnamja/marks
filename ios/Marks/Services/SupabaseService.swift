@@ -6,7 +6,12 @@ import Foundation
 final class SupabaseService {
     static let shared = SupabaseService()
 
-    private let baseURL = Config.supabaseURL
+    private let baseURL: String = {
+        // Strip trailing slash for clean concatenation
+        var url = Config.supabaseURL.absoluteString
+        while url.hasSuffix("/") { url.removeLast() }
+        return url
+    }()
     private let apiKey = Config.supabaseAnonKey
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
@@ -17,7 +22,6 @@ final class SupabaseService {
     private var refreshToken: String?
 
     private init() {
-        // Restore tokens from keychain/UserDefaults
         accessToken = UserDefaults.standard.string(forKey: "supabase_access_token")
         refreshToken = UserDefaults.standard.string(forKey: "supabase_refresh_token")
     }
@@ -25,7 +29,7 @@ final class SupabaseService {
     // MARK: — HTTP helpers
 
     private func request(_ path: String, method: String = "GET", body: Data? = nil, query: [String: String] = [:]) async throws -> Data {
-        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(string: baseURL + path)!
         if !query.isEmpty {
             components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
@@ -84,7 +88,7 @@ final class SupabaseService {
 
     func signIn(email: String, password: String) async throws {
         let body = try JSONEncoder().encode(["email": email, "password": password])
-        let data = try await request("/auth/v1/token?grant_type=password", method: "POST", body: body)
+        let data = try await request("/auth/v1/token", method: "POST", body: body, query: ["grant_type": "password"])
         let auth = try decoder.decode(AuthResponse.self, from: data)
         saveTokens(access: auth.access_token, refresh: auth.refresh_token)
     }
@@ -153,7 +157,10 @@ final class SupabaseService {
     }
 
     func createBookmark(_ insert: BookmarkInsert) async throws -> BookmarkRow {
-        var req = URLRequest(url: baseURL.appendingPathComponent("/rest/v1/bookmarks"))
+        var components = URLComponents(string: baseURL + "/rest/v1/bookmarks")!
+        components.queryItems = []
+
+        var req = URLRequest(url: components.url!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(apiKey, forHTTPHeaderField: "apikey")
