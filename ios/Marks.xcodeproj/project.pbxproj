@@ -32,7 +32,6 @@
 
 		/* Share Extension */
 		27A7B2CA5A40F194D460BCAC /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD5B471A80BF13CDF45BE55; };
-		6C1516546D1928CF65AF0470 /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8780FE5B7D75C80E441116C5; };
 		CC1122334455667788990011 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE33FD05642C695B3130907E; };
 		CC2233445566778899001122 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC7AA68F56EC40814F8BA56; };
 /* End PBXBuildFile section */
@@ -64,7 +63,6 @@
 		A47012F1CA6A232E839547B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 
 		FAD5B471A80BF13CDF45BE55 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
-		8780FE5B7D75C80E441116C5 /* ShareView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareView.swift; sourceTree = "<group>"; };
 		5FC210DB290D7CE9BC3C8CBE /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BE40FCADDC7DB63232877118 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -161,7 +159,6 @@
 			isa = PBXGroup;
 			children = (
 				FAD5B471A80BF13CDF45BE55 /* ShareViewController.swift */,
-				8780FE5B7D75C80E441116C5 /* ShareView.swift */,
 				BE40FCADDC7DB63232877118 /* Info.plist */,
 			);
 			path = ShareExtension;
@@ -302,7 +299,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				27A7B2CA5A40F194D460BCAC,
-				6C1516546D1928CF65AF0470,
 				CC1122334455667788990011,
 				CC2233445566778899001122,
 			);
