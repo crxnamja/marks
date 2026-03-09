@@ -51,24 +51,12 @@ class ShareViewController: UIViewController {
 
     @MainActor
     private func saveBookmark(url: String, title: String) async {
-        // Try to save to Supabase directly
-        do {
-            let insert = SupabaseService.BookmarkInsert(
-                url: url,
-                title: title.isEmpty ? url : title,
-                description: "",
-                tags: []
-            )
-            _ = try await SupabaseService.shared.createBookmark(insert)
-            showSuccess()
-        } catch {
-            // Save to shared UserDefaults for the main app to pick up
-            let defaults = UserDefaults(suiteName: Config.appGroupID)
-            var queue = defaults?.array(forKey: "pendingBookmarks") as? [[String: String]] ?? []
-            queue.append(["url": url, "title": title])
-            defaults?.set(queue, forKey: "pendingBookmarks")
-            showSuccess()
-        }
+        // Save to shared UserDefaults for the main app to sync to Supabase
+        let defaults = UserDefaults(suiteName: Config.appGroupID)
+        var queue = defaults?.array(forKey: "pendingBookmarks") as? [[String: String]] ?? []
+        queue.append(["url": url, "title": title.isEmpty ? url : title])
+        defaults?.set(queue, forKey: "pendingBookmarks")
+        showSuccess()
     }
 
     private func showSuccess() {

@@ -33,7 +33,6 @@
 		/* Share Extension */
 		27A7B2CA5A40F194D460BCAC /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAD5B471A80BF13CDF45BE55; };
 		CC1122334455667788990011 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE33FD05642C695B3130907E; };
-		CC2233445566778899001122 /* SupabaseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DC7AA68F56EC40814F8BA56; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -209,7 +208,6 @@
 			);
 			name = ShareExtension;
 			packageProductDependencies = (
-				71BAA8FCC1A5DB493D18BB91 /* Supabase */,
 			);
 			productName = ShareExtension;
 			productReference = 5FC210DB290D7CE9BC3C8CBE;
@@ -300,7 +298,6 @@
 			files = (
 				27A7B2CA5A40F194D460BCAC,
 				CC1122334455667788990011,
-				CC2233445566778899001122,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -504,11 +501,6 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		F726C9FD3A46FE36FDE358D5 /* Supabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 9E94C250C95EDC52FC81F157;
-			productName = Supabase;
-		};
-		71BAA8FCC1A5DB493D18BB91 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 9E94C250C95EDC52FC81F157;
 			productName = Supabase;
