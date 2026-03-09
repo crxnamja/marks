@@ -29,7 +29,7 @@ struct BookmarkRowView: View {
                 HStack(spacing: 6) {
                     if !bookmark.isRead {
                         Circle()
-                            .fill(.accent)
+                            .fill(Color.accentColor)
                             .frame(width: 7, height: 7)
                     }
                     Text(bookmark.title.isEmpty ? bookmark.url : bookmark.title)
