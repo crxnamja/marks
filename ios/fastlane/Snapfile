@@ -1,0 +1,17 @@
+# Snapfile — fastlane snapshot configuration
+
+devices([
+  "iPhone 16 Pro Max",
+  "iPhone 16 Pro"
+])
+
+languages(["en-US"])
+
+scheme("Marks")
+output_directory("./fastlane/screenshots")
+
+clear_previous_screenshots(true)
+override_status_bar(true)
+
+# Stop after first failure for faster iteration
+stop_after_first_error(true)
