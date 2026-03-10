@@ -12,31 +12,27 @@ final class MarksScreenshots: XCTestCase {
     }
 
     func testTakeScreenshots() {
-        // 1. Bookmark list — main screen
-        let bookmarksList = app.navigationBars["Marks"]
-        if bookmarksList.waitForExistence(timeout: 10) {
-            snapshot("01_BookmarkList")
-        } else {
-            // Might be on login screen — try to wait for any content
-            sleep(3)
-            snapshot("01_BookmarkList")
-        }
+        // 1. Bookmark list — wait for seeded content to appear
+        let firstCell = app.cells.firstMatch
+        XCTAssertTrue(firstCell.waitForExistence(timeout: 10), "Bookmark cells should exist")
+        snapshot("01_BookmarkList")
 
         // 2. Tap first bookmark to open reader view
-        let firstCell = app.cells.firstMatch
-        if firstCell.waitForExistence(timeout: 5) {
-            firstCell.tap()
-            sleep(2) // Wait for reader content to load
-            snapshot("02_ReaderView")
+        firstCell.tap()
+        let backButton = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5))
+        sleep(1)
+        snapshot("02_ReaderView")
 
-            // Go back
-            app.navigationBars.buttons.firstMatch.tap()
-            sleep(1)
-        }
+        // Go back
+        backButton.tap()
 
         // 3. Tags tab
-        app.tabBars.buttons["Tags"].tap()
-        sleep(1)
+        let tagsTab = app.tabBars.buttons["Tags"]
+        XCTAssertTrue(tagsTab.waitForExistence(timeout: 5))
+        tagsTab.tap()
+        let firstTag = app.cells.firstMatch
+        XCTAssertTrue(firstTag.waitForExistence(timeout: 5))
         snapshot("03_Tags")
 
         // 4. Settings tab
@@ -44,11 +40,10 @@ final class MarksScreenshots: XCTestCase {
         sleep(1)
         snapshot("04_Settings")
 
-        // 5. Go back to bookmarks and show search
+        // 5. Back to bookmarks — show search
         app.tabBars.buttons["Bookmarks"].tap()
-        sleep(1)
+        XCTAssertTrue(app.cells.firstMatch.waitForExistence(timeout: 5))
 
-        // Pull down to reveal search bar and type
         let list = app.collectionViews.firstMatch
         if list.exists {
             list.swipeDown()

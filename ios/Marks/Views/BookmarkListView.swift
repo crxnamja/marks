@@ -25,9 +25,11 @@ struct BookmarkListView: View {
                 AddBookmarkView()
             }
             .refreshable {
+                guard !UITestSeeder.isUITest else { return }
                 await vm.sync(context: context)
             }
             .task {
+                guard !UITestSeeder.isUITest else { return }
                 await vm.sync(context: context)
             }
         }
