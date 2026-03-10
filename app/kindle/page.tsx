@@ -9,6 +9,7 @@ type Highlight = {
   location: number | null;
   page: number | null;
   note: string | null;
+  addedOn: string | null;
 };
 
 type Book = {
@@ -54,6 +55,16 @@ async function loadFromServer(): Promise<KindleData | null> {
   } catch {
     return null;
   }
+}
+
+function latestHighlightDate(highlights: Highlight[]): number | null {
+  let latest: number | null = null;
+  for (const h of highlights) {
+    if (!h.addedOn) continue;
+    const t = new Date(h.addedOn).getTime();
+    if (!isNaN(t) && (latest === null || t > latest)) latest = t;
+  }
+  return latest;
 }
 
 export default function KindlePage() {
@@ -163,7 +174,15 @@ export default function KindlePage() {
   const books = useMemo(() => {
     if (!data) return [];
     return data.books
-      .filter((b) => b.highlights && b.highlights.length > 0);
+      .filter((b) => b.highlights && b.highlights.length > 0)
+      .sort((a, b) => {
+        const dateA = latestHighlightDate(a.highlights);
+        const dateB = latestHighlightDate(b.highlights);
+        if (!dateA && !dateB) return 0;
+        if (!dateA) return 1;
+        if (!dateB) return -1;
+        return dateB - dateA;
+      });
   }, [data]);
 
   const filteredBooks = useMemo(() => {
