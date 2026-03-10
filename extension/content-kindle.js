@@ -84,12 +84,14 @@ function parseHighlights(html) {
     }
     const lm = hd ? hd.textContent.match(/Location:\s*([\d,]+)/) : null;
     const pm = hd ? hd.textContent.match(/Page:\s*([\d,]+)/) : null;
+    const dm = hd ? hd.textContent.match(/Added on\s+\w+,\s+(.+)/) : null;
     highlights.push({
       text: he.textContent.trim(),
       color,
       location: lm ? parseInt(lm[1].replace(",", "")) : null,
       page: pm ? parseInt(pm[1].replace(",", "")) : null,
       note: ne && ne.textContent.trim() ? ne.textContent.trim() : null,
+      addedOn: dm ? dm[1].trim() : null,
     });
   }
   return highlights;
