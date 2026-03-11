@@ -254,6 +254,18 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   try {
+    // Detect tweet URLs and add type metadata
+    const bookmarkData = { url, title: title || url, is_read: false };
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.replace("www.", "");
+      if ((host === "x.com" || host === "twitter.com") && parsed.pathname.includes("/status/")) {
+        bookmarkData.type = "tweet";
+        const parts = parsed.pathname.split("/");
+        if (parts[1]) bookmarkData.type_metadata = { author: parts[1] };
+      }
+    } catch {}
+
     let token = config.token;
     let res = await fetch(`${API_URL}/api/bookmarks`, {
       method: "POST",
@@ -511,7 +523,7 @@ async function fetchSuggestedTags(url, title) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "kindle-start-sync") {
-    kindleStartSync(sender.tab?.id).then(sendResponse);
+    kindleStartSync(sender.tab?.id, msg.existingBooks || []).then(sendResponse);
     return true;
   }
   if (msg.type === "kindle-check-scrape") {
@@ -541,13 +553,13 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   }
 });
 
-async function kindleStartSync(appTabId) {
+async function kindleStartSync(appTabId, existingBooks) {
   const tab = await chrome.tabs.create({
     url: "https://read.amazon.com/notebook",
     active: true,
   });
   await chrome.storage.local.set({
-    kindleSyncState: { syncPending: true, appTabId, amazonTabId: tab.id },
+    kindleSyncState: { syncPending: true, appTabId, amazonTabId: tab.id, existingBooks },
   });
   return { ok: true };
 }
@@ -555,7 +567,7 @@ async function kindleStartSync(appTabId) {
 async function kindleCheckScrape(amazonTabId) {
   const { kindleSyncState } = await chrome.storage.local.get("kindleSyncState");
   if (kindleSyncState && kindleSyncState.syncPending && kindleSyncState.amazonTabId === amazonTabId) {
-    return { shouldScrape: true };
+    return { shouldScrape: true, existingBooks: kindleSyncState.existingBooks || [] };
   }
   return { shouldScrape: false };
 }
