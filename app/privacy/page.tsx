@@ -16,9 +16,9 @@ export default function PrivacyPage() {
 
       <h2>What Marks Does</h2>
       <p>
-        Marks is a bookmark manager with a browser extension that lets you save
-        bookmarks with tags and notes. It connects to your Marks account to
-        store and retrieve your bookmarks.
+        Marks is a bookmark manager with a browser extension and iOS app that
+        lets you save bookmarks with tags and notes. It connects to your Marks
+        account to store and retrieve your bookmarks.
       </p>
 
       <h2>Data We Collect</h2>
@@ -62,7 +62,9 @@ export default function PrivacyPage() {
       <p>
         Your bookmarks and archived pages are stored on Marks servers (hosted
         via Supabase and Vercel). Authentication tokens are stored locally in
-        Chrome&apos;s extension storage and are never transmitted to third parties.
+        Chrome&apos;s extension storage or on your iOS device and are never
+        transmitted to third parties. The iOS app caches content locally using
+        SwiftData for offline reading.
       </p>
 
       <h2>Third-Party Services</h2>
