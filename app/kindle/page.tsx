@@ -28,6 +28,20 @@ type KindleData = {
 
 const STORAGE_KEY = "marks-kindle-data";
 
+function mergeKindleData(
+  prev: KindleData | null,
+  incoming: KindleData,
+): KindleData {
+  if (!prev) return incoming;
+  const updatedAsins = new Set(incoming.books.map((b) => b.asin));
+  // Keep books that weren't re-scraped (unchanged), add all incoming
+  const kept = prev.books.filter((b) => !updatedAsins.has(b.asin));
+  return {
+    exportedAt: incoming.exportedAt,
+    books: [...incoming.books, ...kept],
+  };
+}
+
 const HIGHLIGHT_COLORS: Record<string, { bg: string; border: string }> = {
   yellow: { bg: "rgba(250, 204, 21, 0.15)", border: "#eab308" },
   blue: { bg: "rgba(59, 130, 246, 0.12)", border: "#3b82f6" },
@@ -35,26 +49,31 @@ const HIGHLIGHT_COLORS: Record<string, { bg: string; border: string }> = {
   orange: { bg: "rgba(249, 115, 22, 0.12)", border: "#f97316" },
 };
 
-async function saveToServer(kindleData: KindleData) {
-  try {
-    await fetch("/api/kindle", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ data: kindleData }),
-    });
-  } catch {
-    // Server save failed silently — localStorage still has the data
+async function saveToServer(kindleData: KindleData): Promise<boolean> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch("/api/kindle", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: kindleData }),
+      });
+      if (res.ok) return true;
+    } catch {
+      // Network error — retry once
+    }
   }
+  return false;
 }
 
-async function loadFromServer(): Promise<KindleData | null> {
+async function loadFromServer(): Promise<{ data: KindleData | null; error?: string }> {
   try {
     const res = await fetch("/api/kindle");
-    if (!res.ok) return null;
+    if (res.status === 401) return { data: null, error: "auth" };
+    if (!res.ok) return { data: null, error: "server" };
     const json = await res.json();
-    return json.data ?? null;
+    return { data: json.data ?? null };
   } catch {
-    return null;
+    return { data: null, error: "network" };
   }
 }
 
@@ -79,6 +98,8 @@ export default function KindlePage() {
   const [syncMessage, setSyncMessage] = useState("");
   const [extensionReady, setExtensionReady] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [saveFailed, setSaveFailed] = useState(false);
   const autoSynced = useRef(false);
 
   // Load data: try localStorage first, then fetch from server
@@ -100,14 +121,17 @@ export default function KindlePage() {
       }
 
       // No local data — fetch from server (cross-device sync)
-      const serverData = await loadFromServer();
+      const result = await loadFromServer();
       if (cancelled) return;
 
-      if (serverData) {
-        setData(serverData);
+      if (result.error) {
+        setServerError(result.error);
+      }
+      if (result.data) {
+        setData(result.data);
         // Cache locally for next time
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(serverData));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(result.data));
         } catch {}
       }
       setLoaded(true);
@@ -141,12 +165,17 @@ export default function KindlePage() {
           break;
         case "marks:kindle-sync-data": {
           const payload = event.data.payload as KindleData;
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-          setData(payload);
+          // Merge with existing data: updated/new books from payload, keep unchanged ones
+          setData((prev) => {
+            const merged = mergeKindleData(prev, payload);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            saveToServer(merged).then((ok) => {
+              if (!ok) setSaveFailed(true);
+            });
+            return merged;
+          });
           setSyncing(false);
           setSyncMessage("");
-          // Save to server for cross-device access
-          saveToServer(payload);
           break;
         }
       }
@@ -172,7 +201,11 @@ export default function KindlePage() {
     if (syncing || !extensionReady) return;
     setSyncing(true);
     setSyncMessage("Opening Amazon...");
-    window.postMessage({ type: "marks:kindle-start-sync" }, "*");
+    // Pass existing books so the extension can skip unchanged ones
+    const existingBooks = data
+      ? data.books.map((b) => ({ asin: b.asin, highlightCount: b.highlights.length }))
+      : [];
+    window.postMessage({ type: "marks:kindle-start-sync", existingBooks }, "*");
   }
 
   const books = useMemo(() => {
@@ -255,57 +288,82 @@ export default function KindlePage() {
     );
   }
 
-  // No data and no extension — show install instructions
+  // No data and no extension — show appropriate message
   if (!data && !extensionReady) {
     return (
       <div className="container">
         <Nav />
-        <div className="kindle-install">
-          <h2 className="kindle-install-title">Kindle Highlights</h2>
-          <p className="kindle-install-subtitle">
-            Sync your Kindle highlights by installing the Marks extension.
-          </p>
+        {serverError === "auth" ? (
+          <div className="empty">
+            <p>Please sign in to view your Kindle highlights.</p>
+          </div>
+        ) : serverError === "network" || serverError === "server" ? (
+          <div className="empty">
+            <p style={{ marginBottom: "0.5rem" }}>
+              <strong>Couldn&apos;t load highlights</strong>
+            </p>
+            <p style={{ marginBottom: "1rem" }}>
+              Failed to reach the server. Check your connection and reload.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="kindle-sync-btn"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="kindle-install">
+            <h2 className="kindle-install-title">Kindle Highlights</h2>
+            <p className="kindle-install-subtitle">
+              Sync your Kindle highlights by installing the Marks extension.
+            </p>
 
-          <ol className="kindle-install-steps">
-            <li>
-              <strong>Download the extension</strong>
-              <p>
-                <a
-                  href="/marks-extension.zip"
-                  download
-                  className="kindle-sync-btn"
-                >
-                  Download marks-extension.zip
-                </a>
-              </p>
-            </li>
-            <li>
-              <strong>Unzip the file</strong>
-              <p>Double-click the downloaded file to extract it.</p>
-            </li>
-            <li>
-              <strong>Open Chrome Extensions</strong>
-              <p>
-                Go to{" "}
-                <code className="kindle-install-code">
-                  chrome://extensions
-                </code>{" "}
-                and turn on <strong>Developer mode</strong> in the top right.
-              </p>
-            </li>
-            <li>
-              <strong>Load the extension</strong>
-              <p>
-                Click <strong>Load unpacked</strong> and select the unzipped
-                folder. Then reload this page.
-              </p>
-            </li>
-          </ol>
+            <ol className="kindle-install-steps">
+              <li>
+                <strong>Download the extension</strong>
+                <p>
+                  <a
+                    href="/marks-extension.zip"
+                    download
+                    className="kindle-sync-btn"
+                  >
+                    Download marks-extension.zip
+                  </a>
+                </p>
+              </li>
+              <li>
+                <strong>Unzip the file</strong>
+                <p>Double-click the downloaded file to extract it.</p>
+              </li>
+              <li>
+                <strong>Open Chrome Extensions</strong>
+                <p>
+                  Go to{" "}
+                  <code className="kindle-install-code">
+                    chrome://extensions
+                  </code>{" "}
+                  and turn on <strong>Developer mode</strong> in the top right.
+                </p>
+              </li>
+              <li>
+                <strong>Load the extension</strong>
+                <p>
+                  Click <strong>Load unpacked</strong> and select the unzipped
+                  folder. Then reload this page.
+                </p>
+              </li>
+            </ol>
 
-          <p className="kindle-install-note">
-            The extension uses your existing Amazon login. No passwords shared.
-          </p>
-        </div>
+            <p className="kindle-install-note">
+              The extension uses your existing Amazon login. No passwords shared.
+            </p>
+
+            <p className="kindle-install-note" style={{ marginTop: "0.5rem" }}>
+              Already synced on another device? Try reloading this page.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -337,6 +395,25 @@ export default function KindlePage() {
   return (
     <div className="container">
       <Nav />
+
+      {/* Save failure warning */}
+      {saveFailed && (
+        <div className="kindle-save-warning">
+          Highlights saved locally but failed to sync to server. They
+          won&apos;t appear on other devices.{" "}
+          <button
+            className="kindle-sync-link"
+            onClick={() => {
+              setSaveFailed(false);
+              saveToServer(data!).then((ok) => {
+                if (!ok) setSaveFailed(true);
+              });
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Sync bar */}
       <div className="kindle-sync-bar">

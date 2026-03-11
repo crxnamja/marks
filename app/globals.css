@@ -1154,6 +1154,35 @@ header nav .nav-add {
 }
 
 /* Search */
+.feed-controls {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.feed-controls .search-container {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+.hide-read-toggle {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 0.75rem;
+  background: var(--bg-surface);
+  color: var(--text-faint);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.hide-read-toggle:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .search-container {
   position: relative;
   margin-bottom: 1.5rem;
@@ -1333,6 +1362,17 @@ header nav .nav-add {
 }
 
 /* Kindle page */
+.kindle-save-warning {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: rgba(250, 204, 21, 0.1);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .kindle-sync-bar {
   display: flex;
   justify-content: space-between;
