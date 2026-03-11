@@ -40,9 +40,18 @@ final class SyncEngine {
                 try await supabase.deleteBookmark(id: bookmark.id)
                 context.delete(bookmark)
 
-            case .modified, .synced:
-                // TODO: implement update push
+            case .modified:
+                let update = SupabaseService.BookmarkUpdate(
+                    title: bookmark.title,
+                    description: bookmark.desc,
+                    is_read: bookmark.isRead,
+                    is_archived: bookmark.isArchived
+                )
+                try await supabase.updateBookmark(id: bookmark.id, update)
                 bookmark.syncStatus = .synced
+
+            case .synced:
+                break
             }
         }
     }

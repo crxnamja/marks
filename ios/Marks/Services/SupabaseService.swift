@@ -278,6 +278,18 @@ final class SupabaseService {
         return row
     }
 
+    struct BookmarkUpdate: Encodable {
+        let title: String
+        let description: String
+        let is_read: Bool
+        let is_archived: Bool
+    }
+
+    func updateBookmark(id: Int, _ update: BookmarkUpdate) async throws {
+        let body = try JSONEncoder().encode(update)
+        _ = try await request("/rest/v1/bookmarks", method: "PATCH", body: body, query: ["id": "eq.\(id)"])
+    }
+
     func deleteBookmark(id: Int) async throws {
         _ = try await request("/rest/v1/bookmarks", method: "DELETE", query: ["id": "eq.\(id)"])
     }
