@@ -3,6 +3,12 @@
   const response = await chrome.runtime.sendMessage({ type: "kindle-check-scrape" });
   if (!response || !response.shouldScrape) return;
 
+  // Build lookup of existing books for incremental sync
+  const existingByAsin = {};
+  if (response.existingBooks) {
+    response.existingBooks.forEach((b) => { existingByAsin[b.asin] = b.highlightCount; });
+  }
+
   const initialBooks = await waitForBooks();
   if (!initialBooks || initialBooks.length === 0) {
     chrome.runtime.sendMessage({ type: "kindle-scrape-error", error: "No books found. Make sure you have Kindle highlights." });
@@ -13,25 +19,66 @@
   await loadAllBooks();
 
   const bookEls = document.querySelectorAll(".kp-notebook-library-each-book");
-  showProgress(`Found ${bookEls.length} books. Syncing...`);
+
+  // Debug: log first book entry's full HTML and text
+  const firstBook = bookEls[0];
+  if (firstBook) {
+    console.log("[Marks] first book text:", firstBook.textContent);
+    console.log("[Marks] first book HTML:", firstBook.innerHTML);
+  }
 
   const meta = Array.from(bookEls).map((el) => {
     const img = el.querySelector(".kp-notebook-cover-image");
     let cover = img ? img.src : null;
     if (cover) cover = cover.replace(/_SY\d+/, "_SY400");
+    // Amazon shows highlight count in the library list
+    const countEl = el.querySelector(".kp-notebook-highlight-count");
+    const countText = countEl ? countEl.textContent : "";
+    const countMatch = countText.match(/(\d+)/);
+    const highlightCount = countMatch ? parseInt(countMatch[1]) : -1;
+    // Try to find a "last accessed" or date element
+    const allText = el.textContent || "";
+    const dateMatch = allText.match(/(?:Last\s+(?:accessed|opened|read|annotated))[:\s]+(.+?)(?:\n|$)/i)
+      || allText.match(/(\w+ \d{1,2},\s*\d{4})/)
+      || allText.match(/(\d{1,2} \w+ \d{4})/);
+
     return {
       asin: el.id,
       title: (el.querySelector("h2") || {}).textContent?.trim() || "Unknown",
       author: (el.querySelector("p") || {}).textContent?.replace(/^By:\s*/, "").trim() || "Unknown",
       cover,
+      highlightCount,
+      lastAccessedRaw: dateMatch ? dateMatch[1].trim() : null,
     };
   });
+
+  // Filter to only books that are new or have changed highlight counts
+  const toFetch = meta.filter((bk) => {
+    if (!(bk.asin in existingByAsin)) return true; // new book
+    if (bk.highlightCount === -1) return true; // can't determine count, re-fetch
+    return bk.highlightCount !== existingByAsin[bk.asin]; // count changed
+  });
+
+  const skipped = meta.length - toFetch.length;
+  if (toFetch.length === 0) {
+    showProgress("Already up to date!");
+    chrome.runtime.sendMessage({ type: "kindle-scrape-progress", message: "Already up to date!" });
+    await sleep(500);
+    await chrome.runtime.sendMessage({
+      type: "kindle-scrape-complete",
+      payload: { exportedAt: new Date().toISOString(), books: [] },
+    });
+    return;
+  }
+
+  const label = skipped > 0 ? `Syncing ${toFetch.length} updated books (${skipped} unchanged)...` : `Syncing ${toFetch.length} books...`;
+  showProgress(label);
 
   const BATCH = 8;
   const books = [];
 
-  for (let i = 0; i < meta.length; i += BATCH) {
-    const batch = meta.slice(i, i + BATCH);
+  for (let i = 0; i < toFetch.length; i += BATCH) {
+    const batch = toFetch.slice(i, i + BATCH);
     const results = await Promise.all(
       batch.map((bk) =>
         fetch(`/notebook?asin=${bk.asin}&contentLimitState=`, { credentials: "include" })
@@ -47,15 +94,19 @@
         title: r.book.title,
         author: r.book.author,
         cover: r.book.cover,
+        lastAccessed: r.book.lastAccessedRaw,
         highlights: parseHighlights(r.html),
       });
     });
 
-    const done = Math.min(i + BATCH, meta.length);
-    updateProgress(done, meta.length);
-    chrome.runtime.sendMessage({ type: "kindle-scrape-progress", message: `Syncing ${done}/${meta.length} books...` });
+    const done = Math.min(i + BATCH, toFetch.length);
+    updateProgress(done, toFetch.length);
+    const msg = skipped > 0
+      ? `Syncing ${done}/${toFetch.length} updated books (${skipped} unchanged)...`
+      : `Syncing ${done}/${toFetch.length} books...`;
+    chrome.runtime.sendMessage({ type: "kindle-scrape-progress", message: msg });
 
-    if (i + BATCH < meta.length) await sleep(200);
+    if (i + BATCH < toFetch.length) await sleep(200);
   }
 
   await chrome.runtime.sendMessage({
@@ -84,12 +135,31 @@ function parseHighlights(html) {
     }
     const lm = hd ? hd.textContent.match(/Location:\s*([\d,]+)/) : null;
     const pm = hd ? hd.textContent.match(/Page:\s*([\d,]+)/) : null;
+    // Try multiple date patterns from the header or nearby elements
+    const headerText = hd ? hd.textContent : "";
+    const rowText = row.textContent;
+    let addedOn = null;
+    // Pattern: "Added on Thursday, January 1, 2023"
+    const dm1 = headerText.match(/Added on\s+\w+,\s+(.+)/);
+    // Pattern: date in header like "January 1, 2023" or "1 January 2023"
+    const dm2 = headerText.match(/(\w+ \d{1,2},\s*\d{4})/);
+    const dm3 = headerText.match(/(\d{1,2} \w+ \d{4})/);
+    // Look for a dedicated date element in the row
+    const dateEl = row.querySelector(".kp-notebook-highlight-date, .a-color-secondary");
+    const dm4 = dateEl ? dateEl.textContent.match(/(\w+ \d{1,2},\s*\d{4})/) : null;
+    if (dm1) addedOn = dm1[1].trim();
+    else if (dm2) addedOn = dm2[1].trim();
+    else if (dm3) addedOn = dm3[1].trim();
+    else if (dm4) addedOn = dm4[1].trim();
+    // Debug: log first highlight header to console
+    if (highlights.length === 0) console.log("[Marks] highlight header sample:", headerText);
     highlights.push({
       text: he.textContent.trim(),
       color,
       location: lm ? parseInt(lm[1].replace(",", "")) : null,
       page: pm ? parseInt(pm[1].replace(",", "")) : null,
       note: ne && ne.textContent.trim() ? ne.textContent.trim() : null,
+      addedOn,
     });
   }
   return highlights;
