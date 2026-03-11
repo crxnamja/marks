@@ -92,7 +92,7 @@ function isLinkedInPostUrl(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.replace("www.", "");
-    return host === "linkedin.com" && (u.pathname.includes("/posts/") || u.pathname.includes("/feed/update/"));
+    return host === "linkedin.com" && (u.pathname.includes("/posts/") || u.pathname.includes("/pulse/") || u.pathname.includes("/feed/update/"));
   } catch { return false; }
 }
 
@@ -273,24 +273,26 @@ async function showSaveView() {
         document.getElementById("title").value = tab.title || "";
       }
     } else if (tab.id && tab.url && isLinkedInPostUrl(tab.url)) {
-      // LinkedIn post: extract author + post text from DOM
+      // LinkedIn post: extract author + post text + images from DOM
       try {
         const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
+            function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
             // Find the main post container — try permalink overlay first, then feed
             const post = document.querySelector('.scaffold-finite-scroll__content .feed-shared-update-v2')
               || document.querySelector('.feed-shared-update-v2')
               || document.querySelector('[data-urn]');
 
-            // Author name
+            // Author name (use aria-hidden span for clean text without screen-reader extras)
             const authorEl = post?.querySelector('.update-components-actor__name span[aria-hidden="true"]')
               || post?.querySelector('.feed-shared-actor__name span[aria-hidden="true"]')
               || document.querySelector('.update-components-actor__name span[aria-hidden="true"]')
               || document.querySelector('.feed-shared-actor__name span[aria-hidden="true"]');
             const author = authorEl?.textContent?.trim() || "";
 
-            // Post text
+            // Post text element
             const textEl = post?.querySelector('.update-components-text .break-words')
               || post?.querySelector('.feed-shared-update-v2__description .break-words')
               || post?.querySelector('.break-words')
@@ -298,20 +300,60 @@ async function showSaveView() {
               || document.querySelector('.feed-shared-update-v2__description .break-words');
             const text = textEl?.innerText?.trim() || "";
 
-            return { author, text };
+            // Build HTML preserving paragraphs and links
+            let contentHtml = "";
+            if (textEl) {
+              let html = "";
+              for (const node of textEl.childNodes) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                  html += esc(node.textContent || "");
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                  const el = node;
+                  if (el.tagName === "A") {
+                    const href = el.getAttribute("href") || "";
+                    html += '<a href="' + esc(href) + '">' + esc(el.textContent || "") + '</a>';
+                  } else if (el.tagName === "BR") {
+                    html += "<br>";
+                  } else {
+                    html += esc(el.textContent || "");
+                  }
+                }
+              }
+              contentHtml = "<p>" + html + "</p>";
+            }
+
+            // Extract images from the post
+            const images = [];
+            const scope = post || document;
+            const imgEls = scope.querySelectorAll(
+              '.feed-shared-image__container img, ' +
+              '.update-components-image img, ' +
+              '.feed-shared-carousel img'
+            );
+            for (const img of imgEls) {
+              const src = img.getAttribute("src");
+              if (src && !src.includes("profile-displayphoto") && !src.includes("1x1")) {
+                images.push(src);
+                contentHtml += '\n<img src="' + esc(src) + '" alt="LinkedIn post image" />';
+              }
+            }
+
+            return { author, text, contentHtml, images };
           },
         });
-        const li = results?.[0]?.result;
-        if (li) {
-          // Build title from author + first line of post
-          const firstLine = (li.text || "").split("\n")[0].substring(0, 120);
-          const title = li.author
-            ? li.author + (firstLine ? ": " + firstLine : "")
-            : firstLine || tab.title || "";
-          document.getElementById("title").value = title;
-          if (li.text) {
-            document.getElementById("description").value = li.text;
-          }
+        const liData = results?.[0]?.result;
+        if (liData?.text) {
+          document.getElementById("description").value = liData.text;
+          const firstLine = liData.text.split("\n")[0].substring(0, 120);
+          document.getElementById("title").value = liData.author
+            ? `${liData.author}: ${firstLine}`
+            : tab.title || firstLine;
+          tweetMeta = {
+            author: liData.author || "",
+            post_text: liData.text,
+            content_html: liData.contentHtml || "",
+            media_urls: liData.images || [],
+          };
         } else {
           document.getElementById("title").value = tab.title || "";
         }
@@ -441,7 +483,7 @@ saveForm.addEventListener("submit", async (e) => {
     }),
   };
 
-  // Detect tweet URLs and add type metadata
+  // Detect tweet/LinkedIn URLs and add type metadata
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.replace("www.", "");
@@ -451,6 +493,11 @@ saveForm.addEventListener("submit", async (e) => {
       const handle = parts[1] || "";
       if (handle) {
         data.type_metadata = { author: handle };
+      }
+    } else if (host === "linkedin.com" && (parsed.pathname.includes("/posts/") || parsed.pathname.includes("/pulse/"))) {
+      data.type = "linkedin";
+      if (tweetMeta) {
+        data.type_metadata = tweetMeta;
       }
     }
   } catch {}
