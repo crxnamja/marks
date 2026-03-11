@@ -92,7 +92,7 @@ function isLinkedInPostUrl(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.replace("www.", "");
-    return host === "linkedin.com" && (u.pathname.includes("/posts/") || u.pathname.includes("/pulse/"));
+    return host === "linkedin.com" && (u.pathname.includes("/posts/") || u.pathname.includes("/pulse/") || u.pathname.includes("/feed/update/"));
   } catch { return false; }
 }
 
@@ -273,40 +273,38 @@ async function showSaveView() {
         document.getElementById("title").value = tab.title || "";
       }
     } else if (tab.id && tab.url && isLinkedInPostUrl(tab.url)) {
+      // LinkedIn post: extract author + post text + images from DOM
       try {
         const results = await chrome.scripting.executeScript({
           target: { tabId: tab.id },
           func: () => {
             function esc(s) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-            // Extract author name
-            let author = "";
-            // Try the post author link (usually first strong or span with specific classes)
-            const actorEl = document.querySelector('.feed-shared-actor__name, .update-components-actor__name');
-            if (actorEl) {
-              author = actorEl.textContent?.trim().split("\n")[0]?.trim() || "";
-            }
-            // Fallback: profile page header
-            if (!author) {
-              const profileEl = document.querySelector('h1, .text-heading-xlarge');
-              if (profileEl) author = profileEl.textContent?.trim() || "";
-            }
+            // Find the main post container — try permalink overlay first, then feed
+            const post = document.querySelector('.scaffold-finite-scroll__content .feed-shared-update-v2')
+              || document.querySelector('.feed-shared-update-v2')
+              || document.querySelector('[data-urn]');
 
-            // Extract post text
-            let text = "";
+            // Author name (use aria-hidden span for clean text without screen-reader extras)
+            const authorEl = post?.querySelector('.update-components-actor__name span[aria-hidden="true"]')
+              || post?.querySelector('.feed-shared-actor__name span[aria-hidden="true"]')
+              || document.querySelector('.update-components-actor__name span[aria-hidden="true"]')
+              || document.querySelector('.feed-shared-actor__name span[aria-hidden="true"]');
+            const author = authorEl?.textContent?.trim() || "";
+
+            // Post text element
+            const textEl = post?.querySelector('.update-components-text .break-words')
+              || post?.querySelector('.feed-shared-update-v2__description .break-words')
+              || post?.querySelector('.break-words')
+              || document.querySelector('.update-components-text .break-words')
+              || document.querySelector('.feed-shared-update-v2__description .break-words');
+            const text = textEl?.innerText?.trim() || "";
+
+            // Build HTML preserving paragraphs and links
             let contentHtml = "";
-            // LinkedIn post text container
-            const postTextEl = document.querySelector(
-              '.feed-shared-update-v2__description, ' +
-              '.update-components-text, ' +
-              '[data-ad-preview="message"], ' +
-              '.break-words'
-            );
-            if (postTextEl) {
-              text = postTextEl.textContent?.trim() || "";
-              // Build HTML preserving paragraphs and links
+            if (textEl) {
               let html = "";
-              for (const node of postTextEl.childNodes) {
+              for (const node of textEl.childNodes) {
                 if (node.nodeType === Node.TEXT_NODE) {
                   html += esc(node.textContent || "");
                 } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -324,23 +322,10 @@ async function showSaveView() {
               contentHtml = "<p>" + html + "</p>";
             }
 
-            // Fallback: grab the biggest text block in the main content area
-            if (!text) {
-              const candidates = document.querySelectorAll('[dir="ltr"] span, .attributed-text-segment-list__container');
-              let best = "";
-              for (const el of candidates) {
-                const t = el.textContent?.trim() || "";
-                if (t.length > best.length) best = t;
-              }
-              if (best.length > 50) {
-                text = best;
-                contentHtml = "<p>" + esc(best) + "</p>";
-              }
-            }
-
             // Extract images from the post
             const images = [];
-            const imgEls = document.querySelectorAll(
+            const scope = post || document;
+            const imgEls = scope.querySelectorAll(
               '.feed-shared-image__container img, ' +
               '.update-components-image img, ' +
               '.feed-shared-carousel img'
@@ -359,9 +344,10 @@ async function showSaveView() {
         const liData = results?.[0]?.result;
         if (liData?.text) {
           document.getElementById("description").value = liData.text;
+          const firstLine = liData.text.split("\n")[0].substring(0, 120);
           document.getElementById("title").value = liData.author
-            ? `${liData.author}: ${liData.text.slice(0, 100)}`
-            : tab.title || liData.text.slice(0, 100);
+            ? `${liData.author}: ${firstLine}`
+            : tab.title || firstLine;
           tweetMeta = {
             author: liData.author || "",
             post_text: liData.text,

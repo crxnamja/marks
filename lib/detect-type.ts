@@ -24,7 +24,7 @@ export function detectBookmarkType(url: string): BookmarkType {
     // LinkedIn post
     if (
       hostname === "linkedin.com" &&
-      (pathname.includes("/posts/") || pathname.includes("/pulse/"))
+      (pathname.includes("/posts/") || pathname.includes("/pulse/") || pathname.includes("/feed/update/"))
     ) {
       return "linkedin";
     }
