@@ -1,9 +1,5 @@
 # Snapfile — fastlane snapshot configuration
-
-devices([
-  "iPhone 17 Pro Max",
-  "iPhone 17 Pro"
-])
+# Devices are specified per-run in the Fastfile to avoid simultaneous launch issues.
 
 languages(["en-US"])
 
@@ -12,9 +8,4 @@ output_directory("./fastlane/screenshots")
 
 clear_previous_screenshots(true)
 override_status_bar(true)
-
-# Run one device at a time to avoid simulator launch race conditions
-concurrent_simulators(false)
-
-# Don't stop on first failure — capture as many screenshots as possible
 stop_after_first_error(false)

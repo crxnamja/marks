@@ -3,6 +3,9 @@ default_platform(:ios)
 platform :ios do
   desc "Take App Store screenshots"
   lane :screenshots do
-    capture_screenshots
+    # Run each device separately to avoid simultaneous simulator launch crash
+    ["iPhone 17 Pro Max", "iPhone 17 Pro"].each do |device|
+      capture_screenshots(devices: [device])
+    end
   end
 end
