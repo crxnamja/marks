@@ -12,6 +12,28 @@ import { ReadingTracker } from "./reading-tracker";
 
 type Props = { params: Promise<{ id: string }> };
 
+/** Strip LinkedIn reactions, comments, and social noise from archived HTML */
+function cleanLinkedInHtml(html: string, url: string): string {
+  if (!/linkedin\.com/.test(url)) return html;
+  // Aggressively remove everything from "Reactions" / "Comments" section onward.
+  // Readability can output these as any element type, so match broadly:
+  // any tag whose only text content is "Reactions", "Comments", or "Activity"
+  const patterns = [
+    // Standard heading/block: <tag ...>Reactions</tag> and everything after
+    /<[a-z][^>]*>\s*Reactions\s*<\/[a-z]+>\s*[\s\S]*/i,
+    /<[a-z][^>]*>\s*Comments\s*<\/[a-z]+>\s*[\s\S]*/i,
+    /<[a-z][^>]*>\s*Activity\s*<\/[a-z]+>\s*[\s\S]*/i,
+    // Nested: <tag><inner>Reactions</inner></tag> and everything after
+    /<[a-z][^>]*>\s*<[a-z][^>]*>\s*Reactions\s*<\/[a-z]+>\s*<\/[a-z]+>\s*[\s\S]*/i,
+    /<[a-z][^>]*>\s*<[a-z][^>]*>\s*Comments\s*<\/[a-z]+>\s*<\/[a-z]+>\s*[\s\S]*/i,
+  ];
+  let cleaned = html;
+  for (const pat of patterns) {
+    cleaned = cleaned.replace(pat, "");
+  }
+  return cleaned;
+}
+
 function getYouTubeId(url: string): string {
   try {
     const u = new URL(url);
@@ -192,7 +214,7 @@ export default async function ReaderPage({ params }: Props) {
         ) : archived ? (
           <div
             className="reader-content"
-            dangerouslySetInnerHTML={{ __html: archived.content_html }}
+            dangerouslySetInnerHTML={{ __html: cleanLinkedInHtml(archived.content_html, bookmark.url) }}
           />
         ) : (
           <div className="reader-empty">
