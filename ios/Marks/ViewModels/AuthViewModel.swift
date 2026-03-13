@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 @MainActor
 final class AuthViewModel: ObservableObject {
@@ -39,8 +40,12 @@ final class AuthViewModel: ObservableObject {
         }
     }
 
-    func signOut() async {
+    func signOut(context: ModelContext) async {
         try? await supabase.signOut()
+        // Clear all local bookmarks and cached content so next login starts fresh
+        try? context.delete(model: Bookmark.self)
+        try? context.delete(model: CachedContent.self)
+        try? context.save()
         isSignedIn = false
     }
 }

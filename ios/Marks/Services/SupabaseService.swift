@@ -151,6 +151,8 @@ final class SupabaseService {
     func signOut() async throws {
         _ = try? await request("/auth/v1/logout", method: "POST")
         clearTokens()
+        // Clear sync state so next login does a full fetch
+        UserDefaults.standard.removeObject(forKey: "lastSyncDate")
     }
 
     private func saveTokens(access: String, refresh: String) {
