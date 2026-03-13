@@ -240,11 +240,14 @@ final class SupabaseService {
     func fetchBookmarks(since: Date? = nil) async throws -> [BookmarkRow] {
         var query: [String: String] = [
             "select": "*,archived_content(content_html,content_text),bookmark_tags(tags(name))",
-            "order": "created_at.desc"
+            "order": "created_at.desc",
+            "limit": "1000"
         ]
         if let since {
             let iso = ISO8601DateFormatter().string(from: since)
-            query["updated_at"] = "gte.\(iso)"
+            // Use or filter: bookmarks updated since last sync OR created since last sync
+            // This catches new bookmarks where updated_at may be null
+            query["or"] = "(updated_at.gte.\(iso),created_at.gte.\(iso))"
         }
         let data = try await request("/rest/v1/bookmarks", query: query)
         return try decoder.decode([BookmarkRow].self, from: data)
