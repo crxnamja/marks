@@ -288,8 +288,30 @@ export async function POST(req: NextRequest, { params }: Params) {
             excerpt: transcript.text.slice(0, 200),
           });
         }
+
+        // No transcript — still store metadata and mark archived
+        // (YouTube is a SPA, so generic article extraction will always fail)
+        if (metadata) {
+          await updateBookmark(id, {
+            is_archived: true,
+            type_metadata: {
+              ...bookmark.type_metadata,
+              channel: metadata.author_name,
+              thumbnail: metadata.thumbnail_url,
+              has_transcript: false,
+            },
+          });
+        } else {
+          await updateBookmark(id, { is_archived: true });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          source: "youtube-metadata",
+          word_count: 0,
+          excerpt: bookmark.title,
+        });
       }
-      // No transcript available — fall through to generic article extraction
     }
 
     // If pre-fetched HTML provided (e.g. from Chrome extension), parse it directly
