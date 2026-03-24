@@ -11,19 +11,14 @@ export default function SupportPage() {
     <div className="container" style={{ maxWidth: 640, padding: "40px 20px" }}>
       <h1>Marks — Support</h1>
       <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 32 }}>
-        Need help? Here are the best ways to get in touch.
+        Need help? We&apos;re here to assist you.
       </p>
 
-      <h2>Report a Bug or Request a Feature</h2>
+      <h2>Contact Us</h2>
       <p>
-        Open an issue on GitHub:{" "}
-        <a
-          href="https://github.com/crxnamja/marks/issues"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          github.com/crxnamja/marks/issues
-        </a>
+        For any questions, issues, or feedback, email us at{" "}
+        <a href="mailto:support@getmarks.sh">support@getmarks.sh</a>. We
+        typically respond within 24 hours.
       </p>
 
       <h2>Common Questions</h2>
@@ -49,19 +44,25 @@ export default function SupportPage() {
 
       <h3>How do I delete my account?</h3>
       <p>
-        Open an issue on GitHub or contact us to request full account and data
-        deletion.
+        You can delete your account directly in the iOS app. Go to the{" "}
+        <strong>Settings</strong> tab and tap <strong>Delete Account</strong>.
+        This will permanently delete your account and all associated data. You
+        can also email{" "}
+        <a href="mailto:support@getmarks.sh">support@getmarks.sh</a> to request
+        account deletion.
       </p>
 
-      <h2>Contact</h2>
+      <h2>Report a Bug</h2>
       <p>
-        Reach out via the{" "}
+        Email us at{" "}
+        <a href="mailto:support@getmarks.sh">support@getmarks.sh</a> or open an
+        issue on{" "}
         <a
-          href="https://github.com/crxnamja/marks"
+          href="https://github.com/crxnamja/marks/issues"
           target="_blank"
           rel="noopener noreferrer"
         >
-          Marks GitHub repository
+          GitHub
         </a>
         .
       </p>
