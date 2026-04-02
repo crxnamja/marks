@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { getBookmarks, getAllTags } from "@/lib/db";
+import { getBookmarks, getAllTags, updateBookmark } from "@/lib/db";
+import { extractMetadata } from "@/lib/extract";
 import { SearchBar } from "./search-bar";
 import { Bookmarklet } from "./bookmarklet";
 import { BookmarkItem } from "./bookmark-item";
@@ -21,6 +22,24 @@ export default async function Home({
   ]);
 
   const totalPages = Math.ceil(total / 50);
+
+  // Backfill missing titles — extract and persist so they show immediately
+  const needsTitles = bookmarks.filter(
+    (b) => !b.title || /^https?:\/\//.test(b.title),
+  );
+  if (needsTitles.length > 0) {
+    await Promise.all(
+      needsTitles.map(async (b) => {
+        try {
+          const meta = await extractMetadata(b.url);
+          if (meta.title) {
+            b.title = meta.title;
+            updateBookmark(b.id, { title: meta.title }).catch(() => {});
+          }
+        } catch {}
+      }),
+    );
+  }
 
   return (
     <div className="container">

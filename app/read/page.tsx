@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getBookmarks } from "@/lib/db";
+import { getBookmarks, updateBookmark } from "@/lib/db";
+import { extractMetadata } from "@/lib/extract";
 import { MarkReadButton } from "./mark-read-button";
 import { DeleteButton } from "../delete-button";
 
@@ -17,6 +18,24 @@ export default async function ReadLaterPage({
   });
 
   const totalPages = Math.ceil(total / 50);
+
+  // Backfill missing titles
+  const needsTitles = bookmarks.filter(
+    (b) => !b.title || /^https?:\/\//.test(b.title),
+  );
+  if (needsTitles.length > 0) {
+    await Promise.all(
+      needsTitles.map(async (b) => {
+        try {
+          const meta = await extractMetadata(b.url);
+          if (meta.title) {
+            b.title = meta.title;
+            updateBookmark(b.id, { title: meta.title }).catch(() => {});
+          }
+        } catch {}
+      }),
+    );
+  }
 
   return (
     <div className="container">
