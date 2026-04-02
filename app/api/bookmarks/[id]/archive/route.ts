@@ -188,9 +188,11 @@ export async function POST(req: NextRequest, { params }: Params) {
             { onConflict: "bookmark_id" },
           );
 
-          // Update type_metadata with video info
+          // Update type_metadata with video info + fix title if missing
+          const needsVideoTitle = !bookmark.title || /^https?:\/\//.test(bookmark.title);
           await updateBookmark(id, {
             is_archived: true,
+            ...(needsVideoTitle && metadata?.title ? { title: metadata.title } : {}),
             type_metadata: {
               ...bookmark.type_metadata,
               channel: metadata?.author_name,
@@ -353,8 +355,12 @@ export async function POST(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Mark bookmark as archived
-    await updateBookmark(id, { is_archived: true });
+    // Mark bookmark as archived + fix title if missing
+    const needsTitle = !bookmark.title || /^https?:\/\//.test(bookmark.title);
+    await updateBookmark(id, {
+      is_archived: true,
+      ...(needsTitle && article.title ? { title: article.title } : {}),
+    });
 
     // Upload HTML archive to Supabase Storage as durable backup
     try {

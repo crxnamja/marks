@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getBookmark } from "@/lib/db";
+import { getBookmark, updateBookmark } from "@/lib/db";
+import { extractMetadata } from "@/lib/extract";
 import { createClient } from "@/lib/supabase-server";
 import { AnalyzeButton } from "./analyze-button";
 import { ArchiveActions } from "./archive-actions";
@@ -139,6 +140,22 @@ export default async function ReaderPage({ params }: Props) {
     supabase.from("bookmark_enrichments").select("*").eq("bookmark_id", id).single(),
   ]);
 
+  // Fix missing title: if title is empty or just a URL, try to extract it
+  const titleIsUrl = !bookmark.title || /^https?:\/\//.test(bookmark.title);
+  let displayTitle = bookmark.title || bookmark.url;
+  if (titleIsUrl) {
+    try {
+      const meta = await extractMetadata(bookmark.url);
+      if (meta.title) {
+        displayTitle = meta.title;
+        // Persist so it's fixed for next time
+        updateBookmark(id, { title: meta.title }).catch(() => {});
+      }
+    } catch {
+      // keep URL as fallback
+    }
+  }
+
   return (
     <div className="reader-container">
       <ReadingProgress />
@@ -162,7 +179,7 @@ export default async function ReaderPage({ params }: Props) {
 
       <article className="reader-article">
         <header className="reader-header">
-          <h1>{bookmark.title || bookmark.url}</h1>
+          <h1>{displayTitle}</h1>
           {bookmark.type === "tweet" && bookmark.type_metadata?.author && (
             <p className="reader-byline">
               @{String(bookmark.type_metadata.author)}
