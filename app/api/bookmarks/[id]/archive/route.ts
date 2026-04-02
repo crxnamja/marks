@@ -188,9 +188,11 @@ export async function POST(req: NextRequest, { params }: Params) {
             { onConflict: "bookmark_id" },
           );
 
-          // Update type_metadata with video info
+          // Update type_metadata with video info + fix title if missing
+          const needsVideoTitle = !bookmark.title || /^https?:\/\//.test(bookmark.title);
           await updateBookmark(id, {
             is_archived: true,
+            ...(needsVideoTitle && metadata?.title ? { title: metadata.title } : {}),
             type_metadata: {
               ...bookmark.type_metadata,
               channel: metadata?.author_name,
