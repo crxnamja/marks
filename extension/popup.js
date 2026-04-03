@@ -88,6 +88,13 @@ function isTweetUrl(url) {
   } catch { return false; }
 }
 
+function isArchiveUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return /^archive\.(today|ph|is|li|vn|fo|md)$/.test(host);
+  } catch { return false; }
+}
+
 async function showSaveView() {
   saveView.style.display = "block";
 
@@ -332,12 +339,45 @@ async function showSaveView() {
     }
   }
 
+  // If on an archive page, extract the original URL for dedup + saving
+  let checkUrl = tab?.url;
+  if (tab?.url && isArchiveUrl(tab.url) && tab.id) {
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          // Archive.is pages show the original URL in the #HEADER div
+          const header = document.querySelector('#HEADER');
+          if (header) {
+            const links = header.querySelectorAll('a');
+            for (const a of links) {
+              const href = a.href;
+              if (href && !href.includes('archive.') && href.startsWith('http')) return href;
+            }
+          }
+          // Fallback: og:url meta tag
+          const ogUrl = document.querySelector('meta[property="og:url"]');
+          if (ogUrl) {
+            const content = ogUrl.getAttribute('content');
+            if (content && !content.includes('archive.')) return content;
+          }
+          return null;
+        },
+      });
+      const originalUrl = results?.[0]?.result;
+      if (originalUrl) {
+        checkUrl = originalUrl;
+        document.getElementById("url").value = originalUrl;
+      }
+    } catch {}
+  }
+
   // Check if this URL was already saved — pre-fill existing tags
-  if (tab?.url && config.token) {
+  if (checkUrl && config.token) {
     try {
       const existing = await chrome.runtime.sendMessage({
         type: "check-existing",
-        url: tab.url,
+        url: checkUrl,
       });
       if (existing?.exists) {
         document.getElementById("save-btn").textContent = "Update";
@@ -351,9 +391,9 @@ async function showSaveView() {
   }
 
   // Fetch suggested tags (pass title for better AI context on SPAs like x.com)
-  if (tab?.url && config.token) {
+  if (checkUrl && config.token) {
     const titleVal = document.getElementById("title").value || "";
-    fetchSuggestedTags(tab.url, titleVal);
+    fetchSuggestedTags(checkUrl, titleVal);
   }
 }
 
