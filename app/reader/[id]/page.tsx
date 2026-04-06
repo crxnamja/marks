@@ -242,9 +242,21 @@ export default async function ReaderPage({ params }: Props) {
         </header>
 
         {bookmark.type === "tweet" ? (() => {
-          let contentHtml = bookmark.type_metadata?.content_html
-            ? String(bookmark.type_metadata.content_html)
-            : "";
+          // Prefer archived content (clean blockquote) over raw type_metadata
+          // which can contain engagement metrics (reply/retweet/like counts)
+          let contentHtml = archived?.content_html
+            ? String(archived.content_html)
+            : bookmark.type_metadata?.content_html
+              ? String(bookmark.type_metadata.content_html)
+              : "";
+          // Strip tweet engagement metrics (reply/retweet/like/view counts)
+          // These appear as short elements containing just numbers like "3", "26", "2.6K"
+          if (contentHtml && !archived?.content_html) {
+            contentHtml = contentHtml
+              .replace(/<(p|div|span|h[1-6])[^>]*>\s*[\d,.]+[KkMm]?\s*<\/\1>/g, "")
+              .replace(/<(p|div|span|h[1-6])[^>]*>\s*<\/\1>/g, "")
+              .trim();
+          }
           // Improve readability: split <p> blocks containing <br> into separate paragraphs
           if (contentHtml) {
             contentHtml = contentHtml.replace(
@@ -260,6 +272,16 @@ export default async function ReaderPage({ params }: Props) {
             bookmark.description ||
             (bookmark.type_metadata?.tweet_text ? String(bookmark.type_metadata.tweet_text) : "") ||
             bookmark.title;
+          // Collect media images not already embedded in content_html
+          const mediaUrls: string[] = Array.isArray(bookmark.type_metadata?.media_urls)
+            ? (bookmark.type_metadata.media_urls as string[]).filter(
+                (u: string) => {
+                  if (!u.includes("pbs.twimg.com")) return false;
+                  // Check by path to avoid duplicates (extension may clean URLs)
+                  try { const p = new URL(u).pathname; return !contentHtml.includes(p); } catch { return !contentHtml.includes(u); }
+                }
+              )
+            : [];
           return (
             <div className="reader-tweet">
               {contentHtml ? (
@@ -291,6 +313,14 @@ export default async function ReaderPage({ params }: Props) {
                 />
               ) : (
                 <blockquote className="reader-tweet-text">{tweetText}</blockquote>
+              )}
+              {mediaUrls.length > 0 && (
+                <div className="reader-tweet-media">
+                  {mediaUrls.map((src: string, i: number) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={i} src={src} alt="Tweet media" className="reader-tweet-img" />
+                  ))}
+                </div>
               )}
               <a
                 href={bookmark.url}
